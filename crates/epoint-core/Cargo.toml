@@ -1,0 +1,20 @@
+[package]
+name = "epoint-core"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Core of the epoint library"
+
+
+[dependencies]
+ecoord = { workspace = true }
+
+thiserror = { workspace = true }
+polars = { workspace = true, features = ["lazy", "csv-file", "parquet", "ndarray", "dtype-categorical", "strings", "partition_by"] }
+ndarray = { workspace = true }
+chrono = { workspace = true }
+rayon = { workspace = true }
+nalgebra = { workspace = true }
+itertools = { workspace = true }

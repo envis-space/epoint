@@ -1,0 +1,17 @@
+[package]
+name = "epoint-cli"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CLI tool for point cloud operations"
+
+
+[dependencies]
+epoint = { version = "0.0.1-alpha.1", path = "../epoint", registry = "custom" }
+
+clap = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+nalgebra = { workspace = true }
