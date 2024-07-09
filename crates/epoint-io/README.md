@@ -1,6 +1,6 @@
-# epoint
+# epoint-io
 
-A Rust library for processing 3D point clouds.
+IO operations for processing 3D point clouds.
 
 > [!WARNING]  
 > The library is at an early stage of development.

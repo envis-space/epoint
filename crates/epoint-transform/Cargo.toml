@@ -5,16 +5,19 @@ authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Transformations for the epoint library"
+description = "Supplementary operations for processing 3D point clouds."
 
 
 [dependencies]
-epoint-core = { version = "0.0.1-alpha.1", path = "../epoint-core", registry = "custom" }
+epoint-core = { version = "0.0.1-alpha.3", path = "../epoint-core" }
 
 ecoord = { workspace = true }
 
 thiserror = { workspace = true }
-polars = { workspace = true, features = ["lazy", "csv-file", "parquet", "ndarray"] }
+polars = { workspace = true, features = ["lazy", "parquet", "ndarray"] }
+palette = { workspace = true }
 chrono = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 rayon = { workspace = true }
 nalgebra = { workspace = true }

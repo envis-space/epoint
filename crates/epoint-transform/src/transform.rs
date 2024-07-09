@@ -1,77 +1,94 @@
-use ecoord::{FrameId, TransformId};
-use epoint_core::{PointCloud, PointCloudInfo};
+use epoint_core::PointCloud;
+use std::collections::HashSet;
 
-use chrono::{DateTime, Utc};
-use epoint_core::PointDataColumnNames;
-use nalgebra::{Point3, Vector3};
-use polars::prelude::{NamedFrom, Series};
+use crate::Error;
+use crate::Error::InvalidNumber;
+use epoint_core::PointDataColumnType;
+use nalgebra::{Isometry3, Point3, Vector3};
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 
-pub fn translate(point_cloud: &PointCloud, translation: Vector3<f64>) -> PointCloud {
-    let mut translated_data = point_cloud.point_data().clone();
-    translated_data
-        .apply(PointDataColumnNames::X.as_str(), |x| x + translation.x)
-        .expect("TODO: panic message");
-    translated_data
-        .apply(PointDataColumnNames::Y.as_str(), |y| y + translation.y)
-        .expect("TODO: panic message");
-    translated_data
-        .apply(PointDataColumnNames::Z.as_str(), |z| z + translation.z)
-        .expect("TODO: panic message");
+pub fn translate(point_cloud: &PointCloud, translation: Vector3<f64>) -> Result<PointCloud, Error> {
+    let mut translated_data = point_cloud.point_data.data_frame.clone();
+    translated_data.apply(PointDataColumnType::X.as_str(), |x| x + translation.x)?;
+    translated_data.apply(PointDataColumnType::Y.as_str(), |y| y + translation.y)?;
+    translated_data.apply(PointDataColumnType::Z.as_str(), |z| z + translation.z)?;
+
+    if point_cloud.contains_beam_origin() {
+        translated_data.apply(PointDataColumnType::BeamOriginX.as_str(), |x| {
+            x + translation.x
+        })?;
+        translated_data.apply(PointDataColumnType::BeamOriginY.as_str(), |y| {
+            y + translation.y
+        })?;
+        translated_data.apply(PointDataColumnType::BeamOriginZ.as_str(), |z| {
+            z + translation.z
+        })?;
+    }
 
     let info = point_cloud.info().clone();
     let frames = point_cloud.reference_frames().clone();
-
-    PointCloud::from_data_frame(translated_data, info, frames).unwrap()
+    let point_cloud = PointCloud::from_data_frame(translated_data, info, frames)?;
+    Ok(point_cloud)
 }
 
-pub fn transform_to_frame(
+pub fn apply_isometry(
     point_cloud: &PointCloud,
-    timestamp: Option<DateTime<Utc>>,
-    target_frame_id: &FrameId,
-) -> PointCloud {
-    let point_cloud_frame_id = point_cloud
-        .frame_id()
-        .expect("Point cloud must reference a frame id.");
-
-    let transform_id = TransformId::new(target_frame_id.clone(), point_cloud_frame_id.clone());
-
-    let isometry = point_cloud
-        .reference_frames()
-        .derive_transform_graph(&None, &timestamp)
-        .get_isometry(&transform_id);
-
+    isometry: Isometry3<f64>,
+) -> Result<PointCloud, Error> {
     let transformed_points: Vec<Point3<f64>> = point_cloud
+        .point_data
         .get_all_points()
         .par_iter()
         .map(|p| isometry * p)
         .collect();
+    let mut transformed_point_cloud = point_cloud.clone();
+    transformed_point_cloud
+        .point_data
+        .update_points_in_place(transformed_points)?;
 
-    let x_vector: Vec<f64> = transformed_points.par_iter().map(|p| p.x).collect();
-    let y_vector: Vec<f64> = transformed_points.par_iter().map(|p| p.y).collect();
-    let z_vector: Vec<f64> = transformed_points.par_iter().map(|p| p.z).collect();
+    if let Ok(all_beam_origins) = point_cloud.point_data.get_all_beam_origins() {
+        let transformed_beam_origins: Vec<Point3<f64>> =
+            all_beam_origins.par_iter().map(|p| isometry * p).collect();
 
-    let x_series: Series = Series::new(PointDataColumnNames::X.as_str(), &x_vector);
-    let y_series: Series = Series::new(PointDataColumnNames::Y.as_str(), &y_vector);
-    let z_series: Series = Series::new(PointDataColumnNames::Z.as_str(), &z_vector);
+        transformed_point_cloud
+            .point_data
+            .update_beam_origins_in_place(transformed_beam_origins)?;
+    }
 
-    let mut transformed_point_data = point_cloud.point_data().clone();
-    transformed_point_data
-        .replace(PointDataColumnNames::X.as_str(), x_series)
-        .expect("TODO: panic message");
-    transformed_point_data
-        .replace(PointDataColumnNames::Y.as_str(), y_series)
-        .expect("TODO: panic message");
-    transformed_point_data
-        .replace(PointDataColumnNames::Z.as_str(), z_series)
-        .expect("TODO: panic message");
+    Ok(transformed_point_cloud)
+}
 
-    let transformed_info = PointCloudInfo::new(Some(target_frame_id.clone()));
+pub fn deterministic_downsample(
+    point_cloud: &PointCloud,
+    target_size: usize,
+    seed_number: Option<u64>,
+) -> Result<PointCloud, Error> {
+    if point_cloud.size() < target_size {
+        return Err(InvalidNumber);
+    }
 
-    PointCloud::from_data_frame(
-        transformed_point_data,
-        transformed_info,
-        point_cloud.reference_frames().clone(),
-    )
-    .unwrap()
+    let rng = ChaCha8Rng::seed_from_u64(seed_number.unwrap_or_default());
+    let row_indices = generate_random_numbers(rng, point_cloud.size(), target_size)?;
+
+    let downsampled_point_cloud = point_cloud.filter_by_row_indices(row_indices)?;
+    Ok(downsampled_point_cloud)
+}
+
+fn generate_random_numbers(
+    mut rng: ChaCha8Rng,
+    number_max: usize,
+    len: usize,
+) -> Result<HashSet<usize>, Error> {
+    if number_max < len {
+        return Err(InvalidNumber);
+    }
+
+    let mut numbers: HashSet<usize> = HashSet::with_capacity(len);
+    while numbers.len() < len {
+        let n: usize = rng.gen_range(0..number_max);
+        numbers.insert(n);
+    }
+    Ok(numbers)
 }

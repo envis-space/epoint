@@ -1,21 +1,26 @@
-mod data_frame_utils;
+pub mod bounding_box;
 mod error;
+pub mod octree;
 pub mod point_cloud;
 mod point_cloud_info;
+mod point_data;
 mod point_data_columns;
-mod resolve;
+mod utility;
 
 #[doc(inline)]
-pub use error::Error;
+pub use crate::error::Error;
 
 #[doc(inline)]
-pub use point_cloud::PointCloud;
+pub use crate::point_cloud::PointCloud;
 
 #[doc(inline)]
-pub use point_data_columns::PointDataColumns;
+pub use crate::point_data::PointData;
 
 #[doc(inline)]
-pub use point_data_columns::PointDataColumnNames;
+pub use crate::point_data_columns::PointDataColumns;
 
 #[doc(inline)]
-pub use point_cloud_info::PointCloudInfo;
+pub use crate::point_data::PointDataColumnType;
+
+#[doc(inline)]
+pub use crate::point_cloud_info::PointCloudInfo;

@@ -1,6 +1,6 @@
 use ecoord::FrameId;
 
-#[derive(Debug, Default, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct PointCloudInfo {
     pub frame_id: Option<FrameId>,
 }

@@ -5,13 +5,18 @@ authors.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "CLI tool for point cloud operations"
+description = "CLI tool for processing 3D point clouds."
 
 
 [dependencies]
-epoint = { version = "0.0.1-alpha.1", path = "../epoint", registry = "custom" }
+epoint = { version = "0.0.1-alpha.3", path = "../epoint" }
 
 clap = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 nalgebra = { workspace = true }
+walkdir = { workspace = true }
+chrono = { workspace = true }
+
+# todo
+polars = { workspace = true, features = ["lazy", "parquet", "ndarray", "dtype-categorical", "dtype-u16", "strings", "partition_by", "is_between"] }
