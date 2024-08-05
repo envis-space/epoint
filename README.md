@@ -2,8 +2,7 @@
 
 A Rust library for processing 3D point clouds.
 
-> [!WARNING]  
-> The library is at an early stage of development.
+The library is at an early stage of development.
 
 ## Contributing
 

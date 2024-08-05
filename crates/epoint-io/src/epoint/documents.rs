@@ -2,15 +2,9 @@ use ecoord::FrameId;
 use epoint_core::PointCloudInfo;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct EpointInfoDocument {
     pub frame_id: Option<String>,
-}
-
-impl Default for EpointInfoDocument {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl EpointInfoDocument {

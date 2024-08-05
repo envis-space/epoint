@@ -9,7 +9,7 @@ description = "Supplementary operations for processing 3D point clouds."
 
 
 [dependencies]
-epoint-core = { version = "0.0.1-alpha.3", path = "../epoint-core" }
+epoint-core = { version = "0.0.1-alpha.4", path = "../epoint-core" }
 
 ecoord = { workspace = true }
 
