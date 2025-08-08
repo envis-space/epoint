@@ -1,41 +1,39 @@
-use crate::las::read::LasReadInfo;
-use crate::las::LasVersion;
 use crate::Error;
 use crate::Error::InvalidVersion;
+use crate::las::LasVersion;
+use crate::las::read::LasReadInfo;
 use epoint_core::{PointCloud, PointDataColumnType};
-use las::{Read, Version};
+use las::Version;
 
-use polars::export::rayon;
 use polars::prelude::DataFrame;
 use polars::prelude::*;
-use polars::series::Series;
 use rayon::prelude::*;
 use std::fmt::Debug;
 use std::io::{BufReader, Seek};
 
-pub fn import_point_cloud_from_las_file<R: std::io::Read + Seek + Send + Debug>(
+pub fn import_point_cloud_from_las_reader<R: std::io::Read + Seek + Send + 'static + Debug>(
     reader: R,
     normalize_colors: bool,
 ) -> Result<(PointCloud, LasReadInfo), Error> {
     let mut las_reader = las::Reader::new(BufReader::new(reader))?;
-    let las_points = las_reader.points().collect::<Result<Vec<_>, _>>()?;
-    // println!("header: {:?}", las_reader.header());
+    let mut las_points = Vec::new();
+    let point_count = las_reader.read_all_points_into(&mut las_points)?;
 
     let mut point_data_columns = vec![
-        Series::new(
-            PointDataColumnType::X.as_str(),
+        Column::new(
+            PointDataColumnType::X.into(),
             las_points.par_iter().map(|p| p.x).collect::<Vec<f64>>(),
         ),
-        Series::new(
-            PointDataColumnType::Y.as_str(),
+        Column::new(
+            PointDataColumnType::Y.into(),
             las_points.par_iter().map(|p| p.y).collect::<Vec<f64>>(),
         ),
-        Series::new(
-            PointDataColumnType::Z.as_str(),
+        Column::new(
+            PointDataColumnType::Z.into(),
             las_points.par_iter().map(|p| p.z).collect::<Vec<f64>>(),
         ),
-        Series::new(
-            PointDataColumnType::Intensity.as_str(),
+        Column::new(
+            PointDataColumnType::Intensity.into(),
             las_points
                 .par_iter()
                 .map(|p| p.intensity as f32)
@@ -53,36 +51,35 @@ pub fn import_point_cloud_from_las_file<R: std::io::Read + Seek + Send + Debug>(
             1
         };
 
-        let color_red_series = Series::new(
-            PointDataColumnType::ColorRed.as_str(),
+        let color_red_column = Column::new(
+            PointDataColumnType::ColorRed.into(),
             las_points
                 .par_iter()
                 .map(|p| p.color.unwrap_or_default().red * normalization_factor)
                 .collect::<Vec<u16>>(),
         );
-        point_data_columns.push(color_red_series);
+        point_data_columns.push(color_red_column);
 
-        let color_green_series = Series::new(
-            PointDataColumnType::ColorGreen.as_str(),
+        let color_green_column = Column::new(
+            PointDataColumnType::ColorGreen.into(),
             las_points
                 .par_iter()
                 .map(|p| p.color.unwrap_or_default().green * normalization_factor)
                 .collect::<Vec<u16>>(),
         );
-        point_data_columns.push(color_green_series);
+        point_data_columns.push(color_green_column);
 
-        let color_blue_series = Series::new(
-            PointDataColumnType::ColorBlue.as_str(),
+        let color_blue_column = Column::new(
+            PointDataColumnType::ColorBlue.into(),
             las_points
                 .par_iter()
                 .map(|p| p.color.unwrap_or_default().blue * normalization_factor)
                 .collect::<Vec<u16>>(),
         );
-        point_data_columns.push(color_blue_series);
+        point_data_columns.push(color_blue_column);
     }
 
-    let point_data = DataFrame::new(point_data_columns).unwrap();
-
+    let point_data = DataFrame::new(point_data_columns)?;
     let point_cloud =
         PointCloud::from_data_frame(point_data, Default::default(), Default::default())?;
 

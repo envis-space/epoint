@@ -25,7 +25,9 @@ pub enum Error {
 
     #[error("Individual points must not contain a frame_id, when the point cloud itself")]
     MultipleFrameIdDefinitions,
-    #[error("Point cloud contains no frameId definition (neither in the point cloud info nor the individual points)")]
+    #[error(
+        "Point cloud contains no frameId definition (neither in the point cloud info nor the individual points)"
+    )]
     NoFrameIdDefinitions,
     #[error("Point cloud does not contain the frame id `{0}`")]
     NoFrameIdDefinition(FrameId),
@@ -33,7 +35,14 @@ pub enum Error {
     #[error("Point cloud contains no id column")]
     NoIdColumn,
     #[error("Point cloud contains no id column")]
-    NoBeamOriginColumn,
+    NoSensorTranslationColumn,
+    #[error("Point cloud contains no id column")]
+    NoSphericalRangeColumn,
+    #[error("Point cloud contains no id column")]
+    NoOctantIndicesColumns,
+
+    #[error("Point cloud contains no id column")]
+    NoRemainingPoints,
 
     #[error("No row indices specified")]
     NoRowIndices,

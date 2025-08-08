@@ -1,5 +1,5 @@
-pub mod colorize;
 mod error;
+pub mod filter;
 pub mod merge;
 pub mod transform;
 
@@ -17,9 +17,3 @@ pub use crate::transform::deterministic_downsample;
 
 #[doc(inline)]
 pub use crate::merge::merge;
-
-#[doc(inline)]
-pub use crate::colorize::colorize_by_intensity_in_place;
-
-#[doc(inline)]
-pub use crate::colorize::colorize_by_column_hash;

@@ -1,22 +1,24 @@
-mod arguments;
+mod cli;
 mod commands;
+mod error;
+mod utility;
 
-use std::num::ParseIntError;
+use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-use crate::arguments::{Arguments, Commands};
+use crate::cli::{Cli, Commands};
 use clap::Parser;
 use nalgebra::Vector3;
 
-fn main() -> Result<(), ParseIntError> {
+fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
-    let args = Arguments::parse();
+    let cli = Cli::parse();
 
-    match &args.command {
+    match &cli.command {
         Commands::Statistics { file_path } => {
-            let file_path = Path::new(file_path).canonicalize().unwrap();
+            let file_path = Path::new(file_path).canonicalize()?;
 
-            commands::statistics::run(file_path);
+            commands::statistics::run(file_path)?;
         }
         Commands::Offset {
             input_directory,
@@ -27,7 +29,7 @@ fn main() -> Result<(), ParseIntError> {
             let output_directory = PathBuf::from(output_directory);
             let translation_offset: Vector3<f64> = Vector3::new(offset[0], offset[1], offset[2]);
 
-            commands::offset::run(input_directory, output_directory, translation_offset);
+            commands::offset::run(input_directory, output_directory, translation_offset)?;
         }
         Commands::Merge {
             input_directory,
@@ -36,7 +38,7 @@ fn main() -> Result<(), ParseIntError> {
             let input_directory = PathBuf::from(input_directory);
             let output_file = PathBuf::from(output_file);
 
-            commands::merge::run(input_directory, output_file);
+            commands::merge::run(input_directory, output_file)?;
         }
         Commands::Test {
             input_path,
@@ -45,7 +47,7 @@ fn main() -> Result<(), ParseIntError> {
             let input_path = PathBuf::from(input_path);
             let output_directory_path = PathBuf::from(output_directory_path);
 
-            commands::test::run(input_path, output_directory_path);
+            commands::test::run(input_path, output_directory_path)?;
         }
     };
 

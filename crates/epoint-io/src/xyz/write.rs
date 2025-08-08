@@ -1,46 +1,73 @@
-use crate::error::Error;
-use crate::Error::{InvalidFileExtension, NoFileExtension};
+use crate::Error::{InvalidFileExtension, NoFileName};
 use crate::FILE_EXTENSION_XYZ_FORMAT;
+use crate::error::Error;
+use crate::xyz::{DEFAULT_XYZ_SEPARATOR, FILE_EXTENSION_XYZ_ZST_FORMAT};
 use ecoord::FrameId;
-use epoint_core::point_cloud::PointCloud;
 use epoint_core::PointDataColumnType;
+use epoint_core::point_cloud::PointCloud;
 use palette::Srgb;
 use polars::prelude::{CsvWriter, NamedFrom, SerWriter, Series};
 use rayon::iter::ParallelIterator;
 use rayon::prelude::IntoParallelIterator;
-use std::fs::OpenOptions;
-use std::path::PathBuf;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Write};
+use std::path::Path;
+
+pub const DEFAULT_COMPRESSION_LEVEL: i32 = 10;
+pub const DEFAULT_NULL_VALUE: &str = "NaN";
 
 /// `XyzWriter` exports a point cloud to a non-native representation.
 ///
 #[derive(Debug, Clone)]
-pub struct XyzWriter {
-    // TODO: more abstract
-    path: PathBuf,
+pub struct XyzWriter<W: Write> {
+    writer: W,
+    compression_level: Option<i32>,
     frame_id: Option<FrameId>,
     separator: u8,
+    null_value: String,
     color_depth: ColorDepth,
 }
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub enum ColorDepth {
-    EightBit,
     #[default]
+    EightBit,
     SixteenBit,
 }
 
-impl XyzWriter {
-    pub fn new(path: PathBuf) -> Self {
+impl<W: Write> XyzWriter<W> {
+    pub fn new(writer: W) -> Self {
         Self {
-            path,
+            writer,
+            compression_level: Some(crate::epoint::write::DEFAULT_COMPRESSION_LEVEL),
             frame_id: None,
-            separator: b' ',
-            color_depth: ColorDepth::SixteenBit,
+            separator: DEFAULT_XYZ_SEPARATOR,
+            null_value: DEFAULT_NULL_VALUE.to_string(),
+            color_depth: ColorDepth::default(),
         }
+    }
+
+    pub fn with_compressed(mut self, compressed: bool) -> Self {
+        if compressed {
+            self.compression_level = Some(DEFAULT_COMPRESSION_LEVEL);
+        } else {
+            self.compression_level = None;
+        }
+        self
     }
 
     pub fn with_frame_id(mut self, frame_id: FrameId) -> Self {
         self.frame_id = Some(frame_id);
+        self
+    }
+
+    pub fn with_separator(mut self, separator: u8) -> Self {
+        self.separator = separator;
+        self
+    }
+
+    pub fn with_null_value(mut self, null_value: String) -> Self {
+        self.null_value = null_value;
         self
     }
 
@@ -49,27 +76,17 @@ impl XyzWriter {
         self
     }
 
-    pub fn finish(&self, point_cloud: &PointCloud) -> Result<(), Error> {
-        let extension = self.path.extension().ok_or(NoFileExtension())?;
-        if extension != FILE_EXTENSION_XYZ_FORMAT {
-            return Err(InvalidFileExtension(
-                extension.to_str().unwrap_or_default().to_string(),
-            ));
-        }
-
+    pub fn finish(self, point_cloud: &PointCloud) -> Result<(), Error> {
         let mut exported_point_cloud = point_cloud.clone();
         if let Some(frame_id) = &self.frame_id {
-            exported_point_cloud
-                .resolve_to_frame(frame_id.clone())
-                .expect("Resolving should work");
+            exported_point_cloud.resolve_to_frame(frame_id.clone())?;
         }
         /*let mut resulting_point_cloud: PointCloud =
         self.frame_id
             .clone()
             .map_or(point_cloud.to_owned(), |f: FrameId| {
                 exported_point_cloud
-                    .resolve_to_frame(f)
-                    .expect("Resolving should work");
+                    .resolve_to_frame(f)?;
                 exported_point_cloud
             });*/
 
@@ -84,7 +101,7 @@ impl XyzWriter {
                         .collect();
 
                     let color_red_series = Series::new(
-                        PointDataColumnType::X.as_str(),
+                        PointDataColumnType::X.into(),
                         converted_colors.iter().map(|c| c.red).collect::<Vec<u8>>(),
                     );
                     exported_point_cloud
@@ -93,7 +110,7 @@ impl XyzWriter {
                         .replace(PointDataColumnType::ColorRed.as_str(), color_red_series)?;
 
                     let color_green_series = Series::new(
-                        PointDataColumnType::Y.as_str(),
+                        PointDataColumnType::Y.into(),
                         converted_colors
                             .iter()
                             .map(|c| c.green)
@@ -105,7 +122,7 @@ impl XyzWriter {
                         .replace(PointDataColumnType::ColorGreen.as_str(), color_green_series)?;
 
                     let color_blue_series = Series::new(
-                        PointDataColumnType::Z.as_str(),
+                        PointDataColumnType::Z.into(),
                         converted_colors.iter().map(|c| c.blue).collect::<Vec<u8>>(),
                     );
                     exported_point_cloud
@@ -117,15 +134,44 @@ impl XyzWriter {
             }
         }
 
+        let writer: Box<dyn Write> = if let Some(compression_level) = &self.compression_level {
+            let buf_writer = BufWriter::with_capacity(
+                zstd::stream::Encoder::<Vec<u8>>::recommended_input_size(),
+                zstd::stream::Encoder::new(self.writer, *compression_level)?.auto_finish(),
+            );
+            Box::new(buf_writer)
+        } else {
+            Box::new(self.writer)
+        };
+
+        CsvWriter::new(writer)
+            .with_separator(self.separator)
+            .with_null_value(self.null_value)
+            .finish(&mut exported_point_cloud.point_data.data_frame)?;
+
+        Ok(())
+    }
+}
+
+impl XyzWriter<File> {
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+        let file_name_str = path
+            .as_ref()
+            .file_name()
+            .ok_or(NoFileName())?
+            .to_string_lossy()
+            .to_lowercase();
+        if !file_name_str.ends_with(FILE_EXTENSION_XYZ_ZST_FORMAT)
+            && !file_name_str.ends_with(FILE_EXTENSION_XYZ_FORMAT)
+        {
+            return Err(InvalidFileExtension(file_name_str.to_string()));
+        }
+
         let file = OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
-            .open(&self.path)?;
-        CsvWriter::new(file)
-            .with_separator(self.separator)
-            .finish(&mut exported_point_cloud.point_data.data_frame)?;
-
-        Ok(())
+            .open(path)?;
+        Ok(Self::new(file))
     }
 }

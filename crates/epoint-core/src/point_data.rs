@@ -1,11 +1,12 @@
-use crate::bounding_box::AxisAlignedBoundingBox;
 use crate::Error;
 use crate::Error::{
-    ColumnAlreadyExists, ColumnNameMisMatch, NoData, ObligatoryColumn, ShapeMisMatch, TypeMisMatch,
+    ColumnAlreadyExists, ColumnNameMisMatch, LowerBoundEqualsUpperBound,
+    LowerBoundExceedsUpperBound, NoData, ObligatoryColumn, ShapeMisMatch, TypeMisMatch,
 };
 use chrono::{DateTime, TimeZone, Utc};
-use ecoord::{FrameId, ReferenceFrames, SphericalPoint3, TransformId};
-use nalgebra::Point3;
+use ecoord::octree::OctantIndex;
+use ecoord::{AxisAlignedBoundingBox, FrameId, ReferenceFrames, SphericalPoint3, TransformId};
+use nalgebra::{Isometry3, Point3, Quaternion, UnitQuaternion};
 use palette::Srgb;
 use parry3d_f64::shape::ConvexPolyhedron;
 use polars::prelude::*;
@@ -13,7 +14,6 @@ use rayon::prelude::*;
 use std::collections::HashSet;
 use std::ops::{Add, Sub};
 use std::str::FromStr;
-use strum_macros::EnumIter;
 
 const COLUMN_NAME_X_STR: &str = "x";
 const COLUMN_NAME_Y_STR: &str = "y";
@@ -23,17 +23,25 @@ const COLUMN_NAME_FRAME_ID_STR: &str = "frame_id";
 const COLUMN_NAME_TIMESTAMP_SEC_STR: &str = "timestamp_sec";
 const COLUMN_NAME_TIMESTAMP_NANOSEC_STR: &str = "timestamp_nanosec";
 const COLUMN_NAME_INTENSITY_STR: &str = "intensity";
-const COLUMN_NAME_BEAM_ORIGIN_X_STR: &str = "beam_origin_x";
-const COLUMN_NAME_BEAM_ORIGIN_Y_STR: &str = "beam_origin_y";
-const COLUMN_NAME_BEAM_ORIGIN_Z_STR: &str = "beam_origin_z";
+const COLUMN_NAME_SENSOR_TRANSLATION_X_STR: &str = "sensor_translation_x";
+const COLUMN_NAME_SENSOR_TRANSLATION_Y_STR: &str = "sensor_translation_y";
+const COLUMN_NAME_SENSOR_TRANSLATION_Z_STR: &str = "sensor_translation_z";
+const COLUMN_NAME_SENSOR_ROTATION_I_STR: &str = "sensor_rotation_i";
+const COLUMN_NAME_SENSOR_ROTATION_J_STR: &str = "sensor_rotation_j";
+const COLUMN_NAME_SENSOR_ROTATION_K_STR: &str = "sensor_rotation_k";
+const COLUMN_NAME_SENSOR_ROTATION_W_STR: &str = "sensor_rotation_w";
 const COLUMN_NAME_COLOR_RED_STR: &str = "color_red";
 const COLUMN_NAME_COLOR_GREEN_STR: &str = "color_green";
 const COLUMN_NAME_COLOR_BLUE_STR: &str = "color_blue";
 const COLUMN_NAME_SPHERICAL_AZIMUTH_STR: &str = "spherical_azimuth";
 const COLUMN_NAME_SPHERICAL_ELEVATION_STR: &str = "spherical_elevation";
 const COLUMN_NAME_SPHERICAL_RANGE_STR: &str = "spherical_range";
+const COLUMN_NAME_OCTANT_INDEX_LEVEL_STR: &str = "octant_index_level";
+const COLUMN_NAME_OCTANT_INDEX_X_STR: &str = "octant_index_x";
+const COLUMN_NAME_OCTANT_INDEX_Y_STR: &str = "octant_index_y";
+const COLUMN_NAME_OCTANT_INDEX_Z_STR: &str = "octant_index_z";
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, EnumIter)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum PointDataColumnType {
     /// X coordinate (mandatory)
     X,
@@ -51,24 +59,40 @@ pub enum PointDataColumnType {
     TimestampNanoSeconds,
     /// Representation of the pulse return magnitude
     Intensity,
-    /// Beam origin X coordinate of current laser shot
-    BeamOriginX,
-    /// Beam origin Y coordinate of current laser shot
-    BeamOriginY,
-    /// Beam origin Z coordinate of current laser shot
-    BeamOriginZ,
+    /// Sensor translation X coordinate
+    SensorTranslationX,
+    /// Sensor translation Y coordinate
+    SensorTranslationY,
+    /// Sensor translation Z coordinate
+    SensorTranslationZ,
+    /// Sensor rotation I coordinate
+    SensorRotationI,
+    /// Sensor rotation J coordinate
+    SensorRotationJ,
+    /// Sensor rotation K coordinate
+    SensorRotationK,
+    /// Sensor rotation W coordinate
+    SensorRotationW,
     /// Red image channel value
     ColorRed,
     /// Green image channel value
     ColorGreen,
     /// Blue image channel value
     ColorBlue,
-    /// Azimuth in context of spherical coordinates
+    /// Azimuth in the context of spherical coordinates
     SphericalAzimuth,
-    /// Elevation in context of spherical coordinates
+    /// Elevation in the context of spherical coordinates
     SphericalElevation,
-    /// Range in context of spherical coordinates
+    /// Range in the context of spherical coordinates
     SphericalRange,
+    /// Level of octant index
+    OctantIndexLevel,
+    /// X index of octant
+    OctantIndexX,
+    /// Y index of octant
+    OctantIndexY,
+    /// Z index of octant
+    OctantIndexZ,
 }
 
 impl std::str::FromStr for PointDataColumnType {
@@ -84,9 +108,9 @@ impl std::str::FromStr for PointDataColumnType {
             COLUMN_NAME_TIMESTAMP_SEC_STR => Ok(PointDataColumnType::TimestampSeconds),
             COLUMN_NAME_TIMESTAMP_NANOSEC_STR => Ok(PointDataColumnType::TimestampNanoSeconds),
             COLUMN_NAME_INTENSITY_STR => Ok(PointDataColumnType::Intensity),
-            COLUMN_NAME_BEAM_ORIGIN_X_STR => Ok(PointDataColumnType::BeamOriginX),
-            COLUMN_NAME_BEAM_ORIGIN_Y_STR => Ok(PointDataColumnType::BeamOriginY),
-            COLUMN_NAME_BEAM_ORIGIN_Z_STR => Ok(PointDataColumnType::BeamOriginZ),
+            COLUMN_NAME_SENSOR_TRANSLATION_X_STR => Ok(PointDataColumnType::SensorTranslationX),
+            COLUMN_NAME_SENSOR_TRANSLATION_Y_STR => Ok(PointDataColumnType::SensorTranslationY),
+            COLUMN_NAME_SENSOR_TRANSLATION_Z_STR => Ok(PointDataColumnType::SensorTranslationZ),
             COLUMN_NAME_COLOR_RED_STR => Ok(PointDataColumnType::ColorRed),
             COLUMN_NAME_COLOR_GREEN_STR => Ok(PointDataColumnType::ColorGreen),
             COLUMN_NAME_COLOR_BLUE_STR => Ok(PointDataColumnType::ColorBlue),
@@ -109,15 +133,23 @@ impl PointDataColumnType {
             PointDataColumnType::TimestampSeconds => COLUMN_NAME_TIMESTAMP_SEC_STR,
             PointDataColumnType::TimestampNanoSeconds => COLUMN_NAME_TIMESTAMP_NANOSEC_STR,
             PointDataColumnType::Intensity => COLUMN_NAME_INTENSITY_STR,
-            PointDataColumnType::BeamOriginX => COLUMN_NAME_BEAM_ORIGIN_X_STR,
-            PointDataColumnType::BeamOriginY => COLUMN_NAME_BEAM_ORIGIN_Y_STR,
-            PointDataColumnType::BeamOriginZ => COLUMN_NAME_BEAM_ORIGIN_Z_STR,
+            PointDataColumnType::SensorTranslationX => COLUMN_NAME_SENSOR_TRANSLATION_X_STR,
+            PointDataColumnType::SensorTranslationY => COLUMN_NAME_SENSOR_TRANSLATION_Y_STR,
+            PointDataColumnType::SensorTranslationZ => COLUMN_NAME_SENSOR_TRANSLATION_Z_STR,
+            PointDataColumnType::SensorRotationI => COLUMN_NAME_SENSOR_ROTATION_I_STR,
+            PointDataColumnType::SensorRotationJ => COLUMN_NAME_SENSOR_ROTATION_J_STR,
+            PointDataColumnType::SensorRotationK => COLUMN_NAME_SENSOR_ROTATION_K_STR,
+            PointDataColumnType::SensorRotationW => COLUMN_NAME_SENSOR_ROTATION_W_STR,
             PointDataColumnType::ColorRed => COLUMN_NAME_COLOR_RED_STR,
             PointDataColumnType::ColorGreen => COLUMN_NAME_COLOR_GREEN_STR,
             PointDataColumnType::ColorBlue => COLUMN_NAME_COLOR_BLUE_STR,
             PointDataColumnType::SphericalAzimuth => COLUMN_NAME_SPHERICAL_AZIMUTH_STR,
             PointDataColumnType::SphericalElevation => COLUMN_NAME_SPHERICAL_ELEVATION_STR,
             PointDataColumnType::SphericalRange => COLUMN_NAME_SPHERICAL_RANGE_STR,
+            PointDataColumnType::OctantIndexLevel => COLUMN_NAME_OCTANT_INDEX_LEVEL_STR,
+            PointDataColumnType::OctantIndexX => COLUMN_NAME_OCTANT_INDEX_X_STR,
+            PointDataColumnType::OctantIndexY => COLUMN_NAME_OCTANT_INDEX_Y_STR,
+            PointDataColumnType::OctantIndexZ => COLUMN_NAME_OCTANT_INDEX_Z_STR,
         }
     }
 
@@ -131,16 +163,30 @@ impl PointDataColumnType {
             PointDataColumnType::TimestampSeconds => DataType::Int64,
             PointDataColumnType::TimestampNanoSeconds => DataType::UInt32,
             PointDataColumnType::Intensity => DataType::Float32,
-            PointDataColumnType::BeamOriginX => DataType::Float64,
-            PointDataColumnType::BeamOriginY => DataType::Float64,
-            PointDataColumnType::BeamOriginZ => DataType::Float64,
+            PointDataColumnType::SensorTranslationX => DataType::Float64,
+            PointDataColumnType::SensorTranslationY => DataType::Float64,
+            PointDataColumnType::SensorTranslationZ => DataType::Float64,
+            PointDataColumnType::SensorRotationI => DataType::Float64,
+            PointDataColumnType::SensorRotationJ => DataType::Float64,
+            PointDataColumnType::SensorRotationK => DataType::Float64,
+            PointDataColumnType::SensorRotationW => DataType::Float64,
             PointDataColumnType::ColorRed => DataType::UInt16,
             PointDataColumnType::ColorGreen => DataType::UInt16,
             PointDataColumnType::ColorBlue => DataType::UInt16,
             PointDataColumnType::SphericalAzimuth => DataType::Float64,
             PointDataColumnType::SphericalElevation => DataType::Float64,
             PointDataColumnType::SphericalRange => DataType::Float64,
+            PointDataColumnType::OctantIndexLevel => DataType::UInt32,
+            PointDataColumnType::OctantIndexX => DataType::UInt64,
+            PointDataColumnType::OctantIndexY => DataType::UInt64,
+            PointDataColumnType::OctantIndexZ => DataType::UInt64,
         }
+    }
+}
+
+impl From<PointDataColumnType> for PlSmallStr {
+    fn from(value: PointDataColumnType) -> Self {
+        value.as_str().into()
     }
 }
 
@@ -187,10 +233,10 @@ impl PointData {
             .collect();
 
         for current_column_type in data_frame_column_types {
-            let current_series = data_frame
+            let current_column = data_frame
                 .column(current_column_type.as_str())
                 .expect("Column must exist");
-            if current_series.dtype() != &current_column_type.data_frame_data_type() {
+            if current_column.dtype() != &current_column_type.data_frame_data_type() {
                 return Err(TypeMisMatch(current_column_type.as_str()));
             }
         }
@@ -204,6 +250,10 @@ impl PointData {
 
     pub fn height(&self) -> usize {
         self.data_frame.height()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data_frame.is_empty()
     }
 }
 
@@ -275,28 +325,64 @@ impl PointData {
         Ok(values)
     }
 
-    pub fn get_beam_origin_x_values(&self) -> Result<&Float64Chunked, Error> {
+    pub fn get_sensor_translation_x_values(&self) -> Result<&Float64Chunked, Error> {
         let values = self
             .data_frame
-            .column(PointDataColumnType::BeamOriginX.as_str())?
+            .column(PointDataColumnType::SensorTranslationX.as_str())?
             .f64()
             .expect("type must be f64");
         Ok(values)
     }
 
-    pub fn get_beam_origin_y_values(&self) -> Result<&Float64Chunked, Error> {
+    pub fn get_sensor_translation_y_values(&self) -> Result<&Float64Chunked, Error> {
         let values = self
             .data_frame
-            .column(PointDataColumnType::BeamOriginY.as_str())?
+            .column(PointDataColumnType::SensorTranslationY.as_str())?
             .f64()
             .expect("type must be f64");
         Ok(values)
     }
 
-    pub fn get_beam_origin_z_values(&self) -> Result<&Float64Chunked, Error> {
+    pub fn get_sensor_translation_z_values(&self) -> Result<&Float64Chunked, Error> {
         let values = self
             .data_frame
-            .column(PointDataColumnType::BeamOriginZ.as_str())?
+            .column(PointDataColumnType::SensorTranslationZ.as_str())?
+            .f64()
+            .expect("type must be f64");
+        Ok(values)
+    }
+
+    pub fn get_sensor_rotation_i_values(&self) -> Result<&Float64Chunked, Error> {
+        let values = self
+            .data_frame
+            .column(PointDataColumnType::SensorRotationI.as_str())?
+            .f64()
+            .expect("type must be f64");
+        Ok(values)
+    }
+
+    pub fn get_sensor_rotation_j_values(&self) -> Result<&Float64Chunked, Error> {
+        let values = self
+            .data_frame
+            .column(PointDataColumnType::SensorRotationJ.as_str())?
+            .f64()
+            .expect("type must be f64");
+        Ok(values)
+    }
+
+    pub fn get_sensor_rotation_k_values(&self) -> Result<&Float64Chunked, Error> {
+        let values = self
+            .data_frame
+            .column(PointDataColumnType::SensorRotationK.as_str())?
+            .f64()
+            .expect("type must be f64");
+        Ok(values)
+    }
+
+    pub fn get_sensor_rotation_w_values(&self) -> Result<&Float64Chunked, Error> {
+        let values = self
+            .data_frame
+            .column(PointDataColumnType::SensorRotationW.as_str())?
             .f64()
             .expect("type must be f64");
         Ok(values)
@@ -388,21 +474,45 @@ impl PointData {
             .is_ok()
     }
 
-    pub fn contains_beam_origin_x_column(&self) -> bool {
+    pub fn contains_sensor_translation_x_column(&self) -> bool {
         self.data_frame
-            .column(PointDataColumnType::BeamOriginX.as_str())
+            .column(PointDataColumnType::SensorTranslationX.as_str())
             .is_ok()
     }
 
-    pub fn contains_beam_origin_y_column(&self) -> bool {
+    pub fn contains_sensor_translation_y_column(&self) -> bool {
         self.data_frame
-            .column(PointDataColumnType::BeamOriginY.as_str())
+            .column(PointDataColumnType::SensorTranslationY.as_str())
             .is_ok()
     }
 
-    pub fn contains_beam_origin_z_column(&self) -> bool {
+    pub fn contains_sensor_translation_z_column(&self) -> bool {
         self.data_frame
-            .column(PointDataColumnType::BeamOriginZ.as_str())
+            .column(PointDataColumnType::SensorTranslationZ.as_str())
+            .is_ok()
+    }
+
+    pub fn contains_sensor_rotation_i_column(&self) -> bool {
+        self.data_frame
+            .column(PointDataColumnType::SensorRotationI.as_str())
+            .is_ok()
+    }
+
+    pub fn contains_sensor_rotation_j_column(&self) -> bool {
+        self.data_frame
+            .column(PointDataColumnType::SensorRotationJ.as_str())
+            .is_ok()
+    }
+
+    pub fn contains_sensor_rotation_k_column(&self) -> bool {
+        self.data_frame
+            .column(PointDataColumnType::SensorRotationK.as_str())
+            .is_ok()
+    }
+
+    pub fn contains_sensor_rotation_w_column(&self) -> bool {
+        self.data_frame
+            .column(PointDataColumnType::SensorRotationW.as_str())
             .is_ok()
     }
 
@@ -441,6 +551,30 @@ impl PointData {
             .column(PointDataColumnType::SphericalRange.as_str())
             .is_ok()
     }
+
+    pub fn contains_octant_index_level_column(&self) -> bool {
+        self.data_frame
+            .column(PointDataColumnType::OctantIndexLevel.as_str())
+            .is_ok()
+    }
+
+    pub fn contains_octant_index_x_column(&self) -> bool {
+        self.data_frame
+            .column(PointDataColumnType::OctantIndexX.as_str())
+            .is_ok()
+    }
+
+    pub fn contains_octant_index_y_column(&self) -> bool {
+        self.data_frame
+            .column(PointDataColumnType::OctantIndexY.as_str())
+            .is_ok()
+    }
+
+    pub fn contains_octant_index_z_column(&self) -> bool {
+        self.data_frame
+            .column(PointDataColumnType::OctantIndexZ.as_str())
+            .is_ok()
+    }
 }
 
 impl PointData {
@@ -448,16 +582,34 @@ impl PointData {
         self.contains_timestamp_sec_column() && self.contains_timestamp_nanosec_column()
     }
 
-    pub fn contains_beam_origin(&self) -> bool {
-        self.contains_beam_origin_x_column()
-            && self.contains_beam_origin_y_column()
-            && self.contains_beam_origin_z_column()
+    pub fn contains_sensor_translation(&self) -> bool {
+        self.contains_sensor_translation_x_column()
+            && self.contains_sensor_translation_y_column()
+            && self.contains_sensor_translation_z_column()
+    }
+
+    pub fn contains_sensor_rotation(&self) -> bool {
+        self.contains_sensor_rotation_i_column()
+            && self.contains_sensor_rotation_j_column()
+            && self.contains_sensor_rotation_k_column()
+            && self.contains_sensor_rotation_w_column()
+    }
+
+    pub fn contains_sensor_pose(&self) -> bool {
+        self.contains_sensor_translation() && self.contains_sensor_rotation()
     }
 
     pub fn contains_colors(&self) -> bool {
         self.contains_color_red_column()
             && self.contains_color_green_column()
             && self.contains_color_blue_column()
+    }
+
+    pub fn contains_octant_indices(&self) -> bool {
+        self.contains_octant_index_level_column()
+            && self.contains_octant_index_x_column()
+            && self.contains_octant_index_y_column()
+            && self.contains_octant_index_z_column()
     }
 }
 
@@ -482,7 +634,7 @@ impl PointData {
         all_points
     }
 
-    pub fn get_frame_ids(&self) -> Result<Vec<FrameId>, Error> {
+    pub fn get_all_frame_ids(&self) -> Result<Vec<FrameId>, Error> {
         let values = self
             .get_frame_id_values()?
             .cast(&DataType::String)?
@@ -497,21 +649,24 @@ impl PointData {
         let timestamp_sec_series = self.get_timestamp_sec_values()?;
         let timestamp_nanosec_series = self.get_timestamp_nanosec_values()?;
 
-        let times: Vec<DateTime<Utc>> = timestamp_sec_series
+        let timestamps: Vec<DateTime<Utc>> = timestamp_sec_series
             .into_iter()
             .zip(timestamp_nanosec_series)
-            .map(|t| Utc.timestamp_opt(t.0.unwrap(), t.1.unwrap()).unwrap())
+            .map(|(current_sec, current_nanosec)| {
+                Utc.timestamp_opt(current_sec.unwrap(), current_nanosec.unwrap())
+                    .unwrap()
+            })
             .collect();
-        Ok(times)
+        Ok(timestamps)
     }
 
-    /// Returns all points as a vector in the local coordinate frame.
-    pub fn get_all_beam_origins(&self) -> Result<Vec<Point3<f64>>, Error> {
-        let x_values = self.get_beam_origin_x_values()?;
-        let y_values = self.get_beam_origin_y_values()?;
-        let z_values = self.get_beam_origin_z_values()?;
+    /// Returns all sensor translations as points in the local coordinate frame.
+    pub fn get_all_sensor_translations(&self) -> Result<Vec<Point3<f64>>, Error> {
+        let x_values = self.get_sensor_translation_x_values()?;
+        let y_values = self.get_sensor_translation_y_values()?;
+        let z_values = self.get_sensor_translation_z_values()?;
 
-        let all_beam_origins: Vec<Point3<f64>> = (0..self.data_frame.height())
+        let all_sensor_translations: Vec<Point3<f64>> = (0..self.data_frame.height())
             .into_par_iter()
             .map(|i: usize| {
                 Point3::new(
@@ -522,7 +677,47 @@ impl PointData {
             })
             .collect();
 
-        Ok(all_beam_origins)
+        Ok(all_sensor_translations)
+    }
+
+    /// Returns all sensor rotations as quaternions in the local coordinate frame.
+    pub fn get_all_sensor_rotations(&self) -> Result<Vec<UnitQuaternion<f64>>, Error> {
+        let i_values = self.get_sensor_rotation_i_values()?;
+        let j_values = self.get_sensor_rotation_j_values()?;
+        let k_values = self.get_sensor_rotation_k_values()?;
+        let w_values = self.get_sensor_rotation_w_values()?;
+
+        let all_sensor_rotations: Vec<UnitQuaternion<f64>> = (0..self.data_frame.height())
+            .into_par_iter()
+            .map(|i: usize| {
+                UnitQuaternion::new_unchecked(Quaternion::new(
+                    i_values.get(i).unwrap(),
+                    j_values.get(i).unwrap(),
+                    k_values.get(i).unwrap(),
+                    w_values.get(i).unwrap(),
+                ))
+            })
+            .collect();
+
+        Ok(all_sensor_rotations)
+    }
+
+    /// Returns all sensor rotations as quaternions in the local coordinate frame.
+    pub fn get_all_sensor_poses(&self) -> Result<Vec<Isometry3<f64>>, Error> {
+        let sensor_translations = self.get_all_sensor_translations()?;
+        let sensor_rotations = self.get_all_sensor_rotations()?;
+
+        let all_sensor_poses: Vec<Isometry3<f64>> = (0..self.data_frame.height())
+            .into_par_iter()
+            .map(|i: usize| {
+                Isometry3::from_parts(
+                    (*sensor_translations.get(i).unwrap()).into(),
+                    *sensor_rotations.get(i).unwrap(),
+                )
+            })
+            .collect();
+
+        Ok(all_sensor_poses)
     }
 
     pub fn get_all_colors(&self) -> Result<Vec<Srgb<u16>>, Error> {
@@ -565,6 +760,18 @@ impl PointData {
 }
 
 impl PointData {
+    pub fn remove_colors(&mut self) -> Result<(), Error> {
+        self.data_frame = self.data_frame.drop_many([
+            PointDataColumnType::ColorRed.as_str(),
+            PointDataColumnType::ColorGreen.as_str(),
+            PointDataColumnType::ColorBlue.as_str(),
+        ]);
+
+        Ok(())
+    }
+}
+
+impl PointData {
     pub fn get_distinct_frame_ids(&self) -> Result<HashSet<FrameId>, Error> {
         let values: HashSet<FrameId> = self
             .data_frame
@@ -581,6 +788,18 @@ impl PointData {
             .collect();
 
         Ok(values)
+    }
+
+    pub fn get_timestamp_min(&self) -> Result<Option<DateTime<Utc>>, Error> {
+        let all_timestamps = self.get_all_timestamps()?;
+        let value = all_timestamps.iter().min();
+        Ok(value.copied())
+    }
+
+    pub fn get_timestamp_max(&self) -> Result<Option<DateTime<Utc>>, Error> {
+        let all_timestamps = self.get_all_timestamps()?;
+        let value = all_timestamps.iter().max();
+        Ok(value.copied())
     }
 
     pub fn get_median_time(&self) -> Result<DateTime<Utc>, Error> {
@@ -621,6 +840,40 @@ impl PointData {
         local_min + diagonal / 2.0
     }
 
+    /// Returns the minimum sensor translation point of the [AABB](https://en.wikipedia.org/wiki/Minimum_bounding_box#Axis-aligned_minimum_bounding_box).
+    pub fn get_local_sensor_translation_min(&self) -> Result<Point3<f64>, Error> {
+        let x = self
+            .get_sensor_translation_x_values()?
+            .min()
+            .expect("point cloud not empty");
+        let y = self
+            .get_sensor_translation_y_values()?
+            .min()
+            .expect("point cloud not empty");
+        let z = self
+            .get_sensor_translation_z_values()?
+            .min()
+            .expect("point cloud not empty");
+        Ok(Point3::new(x, y, z))
+    }
+
+    /// Returns the maximum sensor translation point of the [AABB](https://en.wikipedia.org/wiki/Minimum_bounding_box#Axis-aligned_minimum_bounding_box).
+    pub fn get_local_sensor_translation_max(&self) -> Result<Point3<f64>, Error> {
+        let x = self
+            .get_sensor_translation_x_values()?
+            .max()
+            .expect("point cloud not empty");
+        let y = self
+            .get_sensor_translation_y_values()?
+            .max()
+            .expect("point cloud not empty");
+        let z = self
+            .get_sensor_translation_z_values()?
+            .max()
+            .expect("point cloud not empty");
+        Ok(Point3::new(x, y, z))
+    }
+
     pub fn get_id_min(&self) -> Result<Option<u64>, Error> {
         let value = self.get_id_values()?.min();
         Ok(value)
@@ -641,7 +894,11 @@ impl PointData {
     }
 
     pub fn derive_convex_hull(&self) -> Option<ConvexPolyhedron> {
-        let points = self.get_all_points();
+        let points: Vec<parry3d_f64::math::Point<f64>> = self
+            .get_all_points()
+            .iter()
+            .map(|p| parry3d_f64::math::Point::new(p.x, p.y, p.z))
+            .collect();
         ConvexPolyhedron::from_convex_hull(&points)
     }
 }
@@ -658,7 +915,7 @@ impl PointData {
             return Err(ShapeMisMatch("should have the same height"));
         }
 
-        let new_series = Series::new(PointDataColumnType::Id.as_str(), values);
+        let new_series = Series::new(PointDataColumnType::Id.into(), values);
         self.data_frame.with_column(new_series)?;
 
         Ok(())
@@ -685,7 +942,7 @@ impl PointData {
             ));
         }
 
-        let new_series = Series::new(name, values);
+        let new_series = Series::new(name.into(), values);
         self.data_frame.with_column(new_series)?;
         Ok(())
     }
@@ -698,7 +955,7 @@ impl PointData {
             ));
         }
 
-        let new_series = Series::new(name, values);
+        let new_series = Series::new(name.into(), values);
         self.data_frame.with_column(new_series)?;
         Ok(())
     }
@@ -711,7 +968,7 @@ impl PointData {
             ));
         }
 
-        let new_series = Series::new(name, values);
+        let new_series = Series::new(name.into(), values);
         self.data_frame.with_column(new_series)?;
         Ok(())
     }
@@ -724,7 +981,7 @@ impl PointData {
             ));
         }
 
-        let new_series = Series::new(name, values);
+        let new_series = Series::new(name.into(), values);
         self.data_frame.with_column(new_series)?;
         Ok(())
     }
@@ -744,55 +1001,6 @@ impl PointData {
 }
 
 impl PointData {
-    pub fn extract_frame_ids(&self) -> Result<Vec<FrameId>, Error> {
-        let frame_ids = self
-            .get_frame_id_values()?
-            .cast(&DataType::String)
-            .unwrap()
-            .str()
-            .unwrap()
-            .into_no_null_iter()
-            .map(|f| f.to_string().into())
-            .collect();
-
-        Ok(frame_ids)
-    }
-
-    pub fn extract_beam_origins(&self) -> Result<Vec<Point3<f64>>, Error> {
-        let beam_x_values = self.get_beam_origin_x_values()?;
-        let beam_y_values = self.get_beam_origin_y_values()?;
-        let beam_z_values = self.get_beam_origin_z_values()?;
-
-        let all_beam_origin: Vec<Point3<f64>> = (0..self.data_frame.height())
-            .into_par_iter()
-            .map(|i: usize| {
-                Point3::new(
-                    beam_x_values.get(i).unwrap(),
-                    beam_y_values.get(i).unwrap(),
-                    beam_z_values.get(i).unwrap(),
-                )
-            })
-            .collect();
-
-        Ok(all_beam_origin)
-    }
-
-    pub fn extract_timestamps(&self) -> Result<Vec<DateTime<Utc>>, Error> {
-        let timestamp_seconds: &Int64Chunked = self.get_timestamp_sec_values()?;
-        let timestamp_nanoseconds: &UInt32Chunked = self.get_timestamp_nanosec_values()?;
-
-        let timestamps: Vec<DateTime<Utc>> = timestamp_seconds
-            .into_iter()
-            .zip(timestamp_nanoseconds)
-            .map(|(current_seconds, current_nanoseconds)| {
-                Utc.timestamp_opt(current_seconds.unwrap(), current_nanoseconds.unwrap())
-                    .unwrap()
-            })
-            .collect();
-
-        Ok(timestamps)
-    }
-
     pub fn update_points_in_place(&mut self, points: Vec<Point3<f64>>) -> Result<(), Error> {
         if points.len() != self.data_frame.height() {
             return Err(ShapeMisMatch("points"));
@@ -810,15 +1018,15 @@ impl PointData {
         }
 
         let x_series = Series::new(
-            PointDataColumnType::X.as_str(),
+            PointDataColumnType::X.into(),
             points.iter().map(|p| p.x).collect::<Vec<f64>>(),
         );
         let y_series = Series::new(
-            PointDataColumnType::Y.as_str(),
+            PointDataColumnType::Y.into(),
             points.iter().map(|p| p.y).collect::<Vec<f64>>(),
         );
         let z_series = Series::new(
-            PointDataColumnType::Z.as_str(),
+            PointDataColumnType::Z.into(),
             points.iter().map(|p| p.z).collect::<Vec<f64>>(),
         );
         self.data_frame
@@ -833,40 +1041,119 @@ impl PointData {
 
     // pub fn derive_spherical_points_in_place(&mut self) -> Result<(), Error> {}
 
-    pub fn update_beam_origins_in_place(
+    pub fn update_sensor_translations_in_place(
         &mut self,
-        beam_origins: Vec<Point3<f64>>,
+        sensor_translations: Vec<Point3<f64>>,
     ) -> Result<(), Error> {
-        if beam_origins.len() != self.data_frame.height() {
+        if sensor_translations.len() != self.data_frame.height() {
             return Err(ShapeMisMatch(
-                "beam_origins has a different size than the point_data",
+                "sensor_translations has a different size than the point_data",
             ));
         }
 
-        let beam_origin_x_series = Series::new(
-            PointDataColumnType::X.as_str(),
-            beam_origins.iter().map(|p| p.x).collect::<Vec<f64>>(),
+        let sensor_translation_x_series = Series::new(
+            PointDataColumnType::SensorTranslationX.into(),
+            sensor_translations
+                .iter()
+                .map(|p| p.x)
+                .collect::<Vec<f64>>(),
         );
-        let beam_origin_y_series = Series::new(
-            PointDataColumnType::Y.as_str(),
-            beam_origins.iter().map(|p| p.y).collect::<Vec<f64>>(),
+        let sensor_translation_y_series = Series::new(
+            PointDataColumnType::SensorTranslationY.into(),
+            sensor_translations
+                .iter()
+                .map(|p| p.y)
+                .collect::<Vec<f64>>(),
         );
-        let beam_origin_z_series = Series::new(
-            PointDataColumnType::Z.as_str(),
-            beam_origins.iter().map(|p| p.z).collect::<Vec<f64>>(),
+        let sensor_translation_z_series = Series::new(
+            PointDataColumnType::SensorTranslationZ.into(),
+            sensor_translations
+                .iter()
+                .map(|p| p.z)
+                .collect::<Vec<f64>>(),
         );
         self.data_frame.replace(
-            PointDataColumnType::BeamOriginX.as_str(),
-            beam_origin_x_series,
+            PointDataColumnType::SensorTranslationX.as_str(),
+            sensor_translation_x_series,
         )?;
         self.data_frame.replace(
-            PointDataColumnType::BeamOriginY.as_str(),
-            beam_origin_y_series,
+            PointDataColumnType::SensorTranslationY.as_str(),
+            sensor_translation_y_series,
         )?;
         self.data_frame.replace(
-            PointDataColumnType::BeamOriginZ.as_str(),
-            beam_origin_z_series,
+            PointDataColumnType::SensorTranslationZ.as_str(),
+            sensor_translation_z_series,
         )?;
+
+        Ok(())
+    }
+
+    pub fn update_sensor_rotations_in_place(
+        &mut self,
+        sensor_rotations: Vec<UnitQuaternion<f64>>,
+    ) -> Result<(), Error> {
+        if sensor_rotations.len() != self.data_frame.height() {
+            return Err(ShapeMisMatch(
+                "sensor_translations has a different size than the point_data",
+            ));
+        }
+
+        let sensor_rotation_i_series = Series::new(
+            PointDataColumnType::SensorRotationI.into(),
+            sensor_rotations.iter().map(|r| r.i).collect::<Vec<f64>>(),
+        );
+        let sensor_rotation_j_series = Series::new(
+            PointDataColumnType::SensorRotationJ.into(),
+            sensor_rotations.iter().map(|r| r.j).collect::<Vec<f64>>(),
+        );
+        let sensor_rotation_k_series = Series::new(
+            PointDataColumnType::SensorRotationK.into(),
+            sensor_rotations.iter().map(|r| r.k).collect::<Vec<f64>>(),
+        );
+        let sensor_rotation_w_series = Series::new(
+            PointDataColumnType::SensorRotationW.into(),
+            sensor_rotations.iter().map(|r| r.w).collect::<Vec<f64>>(),
+        );
+
+        self.data_frame.replace(
+            PointDataColumnType::SensorRotationI.as_str(),
+            sensor_rotation_i_series,
+        )?;
+        self.data_frame.replace(
+            PointDataColumnType::SensorRotationJ.as_str(),
+            sensor_rotation_j_series,
+        )?;
+        self.data_frame.replace(
+            PointDataColumnType::SensorRotationK.as_str(),
+            sensor_rotation_k_series,
+        )?;
+        self.data_frame.replace(
+            PointDataColumnType::SensorRotationW.as_str(),
+            sensor_rotation_w_series,
+        )?;
+
+        Ok(())
+    }
+
+    pub fn update_sensor_poses_in_place(
+        &mut self,
+        sensor_poses: Vec<Isometry3<f64>>,
+    ) -> Result<(), Error> {
+        if sensor_poses.len() != self.data_frame.height() {
+            return Err(ShapeMisMatch(
+                "sensor_poses has a different size than the point_data",
+            ));
+        }
+
+        let sensor_translations: Vec<Point3<f64>> = sensor_poses
+            .iter()
+            .map(|i| i.translation.vector.into())
+            .collect();
+        self.update_sensor_translations_in_place(sensor_translations)?;
+
+        let sensor_rotations: Vec<UnitQuaternion<f64>> =
+            sensor_poses.into_iter().map(|i| i.rotation).collect();
+        self.update_sensor_rotations_in_place(sensor_rotations)?;
 
         Ok(())
     }
@@ -882,23 +1169,55 @@ impl PointData {
         }
 
         let spherical_azimuth_series = Series::new(
-            PointDataColumnType::SphericalAzimuth.as_str(),
+            PointDataColumnType::SphericalAzimuth.into(),
             spherical_points.iter().map(|p| p.phi).collect::<Vec<f64>>(),
         );
         let spherical_elevation_series = Series::new(
-            PointDataColumnType::SphericalElevation.as_str(),
+            PointDataColumnType::SphericalElevation.into(),
             spherical_points
                 .iter()
                 .map(|p| p.theta)
                 .collect::<Vec<f64>>(),
         );
         let spherical_range_series = Series::new(
-            PointDataColumnType::SphericalRange.as_str(),
+            PointDataColumnType::SphericalRange.into(),
             spherical_points.iter().map(|p| p.r).collect::<Vec<f64>>(),
         );
         self.data_frame.with_column(spherical_azimuth_series)?;
         self.data_frame.with_column(spherical_elevation_series)?;
         self.data_frame.with_column(spherical_range_series)?;
+
+        Ok(())
+    }
+
+    pub fn add_octant_indices(&mut self, octant_indices: Vec<OctantIndex>) -> Result<(), Error> {
+        if octant_indices.len() != self.data_frame.height() {
+            return Err(ShapeMisMatch(
+                "octant_indices has a different size than the point_data",
+            ));
+        }
+
+        let octant_index_level_series = Series::new(
+            PointDataColumnType::OctantIndexLevel.into(),
+            octant_indices.iter().map(|i| i.level).collect::<Vec<u32>>(),
+        );
+        let octant_index_x_series = Series::new(
+            PointDataColumnType::OctantIndexX.into(),
+            octant_indices.iter().map(|i| i.x).collect::<Vec<u64>>(),
+        );
+        let octant_index_y_series = Series::new(
+            PointDataColumnType::OctantIndexY.into(),
+            octant_indices.iter().map(|i| i.y).collect::<Vec<u64>>(),
+        );
+        let octant_index_z_series = Series::new(
+            PointDataColumnType::OctantIndexZ.into(),
+            octant_indices.iter().map(|i| i.z).collect::<Vec<u64>>(),
+        );
+
+        self.data_frame.with_column(octant_index_level_series)?;
+        self.data_frame.with_column(octant_index_x_series)?;
+        self.data_frame.with_column(octant_index_y_series)?;
+        self.data_frame.with_column(octant_index_z_series)?;
 
         Ok(())
     }
@@ -921,7 +1240,7 @@ impl PointData {
         }
 
         let frame_id_series = Series::new(
-            PointDataColumnType::FrameId.as_str(),
+            PointDataColumnType::FrameId.into(),
             frame_ids
                 .into_iter()
                 .map(|x| x.to_string())
@@ -930,6 +1249,127 @@ impl PointData {
         .cast(&DataType::Categorical(None, Default::default()))
         .unwrap();
         self.data_frame.with_column(frame_id_series)?;
+
+        Ok(())
+    }
+
+    pub fn add_unique_sensor_translation(
+        &mut self,
+        sensor_translation: Point3<f64>,
+    ) -> Result<(), Error> {
+        let sensor_translations: Vec<Point3<f64>> =
+            vec![sensor_translation; self.data_frame.height()];
+        self.add_sensor_translations(sensor_translations)?;
+
+        Ok(())
+    }
+
+    pub fn add_sensor_translations(
+        &mut self,
+        sensor_translations: Vec<Point3<f64>>,
+    ) -> Result<(), Error> {
+        if sensor_translations.len() != self.data_frame.height() {
+            return Err(ShapeMisMatch(
+                "sensor_translation has a different size than the point_data",
+            ));
+        }
+
+        let sensor_translation_x_series = Series::new(
+            PointDataColumnType::SensorTranslationX.into(),
+            sensor_translations
+                .iter()
+                .map(|p| p.x)
+                .collect::<Vec<f64>>(),
+        );
+        let sensor_translation_y_series = Series::new(
+            PointDataColumnType::SensorTranslationY.into(),
+            sensor_translations
+                .iter()
+                .map(|p| p.y)
+                .collect::<Vec<f64>>(),
+        );
+        let sensor_translation_z_series = Series::new(
+            PointDataColumnType::SensorTranslationZ.into(),
+            sensor_translations
+                .iter()
+                .map(|p| p.z)
+                .collect::<Vec<f64>>(),
+        );
+        self.data_frame.with_column(sensor_translation_x_series)?;
+        self.data_frame.with_column(sensor_translation_y_series)?;
+        self.data_frame.with_column(sensor_translation_z_series)?;
+
+        Ok(())
+    }
+
+    pub fn add_unique_sensor_rotation(
+        &mut self,
+        sensor_rotation: UnitQuaternion<f64>,
+    ) -> Result<(), Error> {
+        let sensor_rotations: Vec<UnitQuaternion<f64>> =
+            vec![sensor_rotation; self.data_frame.height()];
+        self.add_sensor_rotations(sensor_rotations)?;
+
+        Ok(())
+    }
+
+    pub fn add_sensor_rotations(
+        &mut self,
+        sensor_rotations: Vec<UnitQuaternion<f64>>,
+    ) -> Result<(), Error> {
+        if sensor_rotations.len() != self.data_frame.height() {
+            return Err(ShapeMisMatch(
+                "sensor_rotations has a different size than the point_data",
+            ));
+        }
+
+        let sensor_rotation_i_series = Series::new(
+            PointDataColumnType::SensorRotationI.into(),
+            sensor_rotations.iter().map(|r| r.i).collect::<Vec<f64>>(),
+        );
+        let sensor_rotation_j_series = Series::new(
+            PointDataColumnType::SensorRotationJ.into(),
+            sensor_rotations.iter().map(|r| r.j).collect::<Vec<f64>>(),
+        );
+        let sensor_rotation_k_series = Series::new(
+            PointDataColumnType::SensorRotationK.into(),
+            sensor_rotations.iter().map(|r| r.k).collect::<Vec<f64>>(),
+        );
+        let sensor_rotation_w_series = Series::new(
+            PointDataColumnType::SensorRotationW.into(),
+            sensor_rotations.iter().map(|r| r.w).collect::<Vec<f64>>(),
+        );
+        self.data_frame.with_column(sensor_rotation_i_series)?;
+        self.data_frame.with_column(sensor_rotation_j_series)?;
+        self.data_frame.with_column(sensor_rotation_k_series)?;
+        self.data_frame.with_column(sensor_rotation_w_series)?;
+
+        Ok(())
+    }
+
+    pub fn add_unique_sensor_pose(&mut self, sensor_pose: Isometry3<f64>) -> Result<(), Error> {
+        let sensor_poses: Vec<Isometry3<f64>> = vec![sensor_pose; self.data_frame.height()];
+        self.add_sensor_poses(sensor_poses)?;
+
+        Ok(())
+    }
+
+    pub fn add_sensor_poses(&mut self, sensor_poses: Vec<Isometry3<f64>>) -> Result<(), Error> {
+        if sensor_poses.len() != self.data_frame.height() {
+            return Err(ShapeMisMatch(
+                "sensor_rotations has a different size than the point_data",
+            ));
+        }
+
+        let sensor_translations: Vec<Point3<f64>> = sensor_poses
+            .iter()
+            .map(|i| i.translation.vector.into())
+            .collect();
+        self.add_sensor_translations(sensor_translations)?;
+
+        let sensor_rotations: Vec<UnitQuaternion<f64>> =
+            sensor_poses.into_iter().map(|i| i.rotation).collect();
+        self.add_sensor_rotations(sensor_rotations)?;
 
         Ok(())
     }
@@ -949,15 +1389,15 @@ impl PointData {
         }
 
         let color_red_series = Series::new(
-            PointDataColumnType::ColorRed.as_str(),
+            PointDataColumnType::ColorRed.into(),
             colors.iter().map(|p| p.red).collect::<Vec<u16>>(),
         );
         let color_green_series = Series::new(
-            PointDataColumnType::ColorGreen.as_str(),
+            PointDataColumnType::ColorGreen.into(),
             colors.iter().map(|p| p.green).collect::<Vec<u16>>(),
         );
         let color_blue_series = Series::new(
-            PointDataColumnType::ColorBlue.as_str(),
+            PointDataColumnType::ColorBlue.into(),
             colors.iter().map(|p| p.blue).collect::<Vec<u16>>(),
         );
         self.data_frame.with_column(color_red_series)?;
@@ -1029,13 +1469,13 @@ impl PointData {
         beam_length_max: f64,
     ) -> Result<Option<PointData>, Error> {
         if beam_length_min > beam_length_max {
-            return Err(Error::LowerBoundExceedsUpperBound);
+            return Err(LowerBoundExceedsUpperBound);
         }
         if beam_length_min == beam_length_max {
-            return Err(Error::LowerBoundEqualsUpperBound);
+            return Err(LowerBoundEqualsUpperBound);
         }
-        if !self.contains_beam_origin() {
-            return Err(Error::NoBeamOriginColumn);
+        if !self.contains_sensor_translation() {
+            return Err(Error::NoSensorTranslationColumn);
         }
 
         let filtered_data_frame = self
@@ -1044,16 +1484,16 @@ impl PointData {
             .lazy()
             .filter(
                 col(PointDataColumnType::X.as_str())
-                    .sub(col(PointDataColumnType::BeamOriginX.as_str()))
+                    .sub(col(PointDataColumnType::SensorTranslationX.as_str()))
                     .pow(2)
                     .add(
                         col(PointDataColumnType::Y.as_str())
-                            .sub(col(PointDataColumnType::BeamOriginY.as_str()))
+                            .sub(col(PointDataColumnType::SensorTranslationY.as_str()))
                             .pow(2),
                     )
                     .add(
                         col(PointDataColumnType::Z.as_str())
-                            .sub(col(PointDataColumnType::BeamOriginZ.as_str()))
+                            .sub(col(PointDataColumnType::SensorTranslationZ.as_str()))
                             .pow(2),
                     )
                     .is_between(
@@ -1061,6 +1501,167 @@ impl PointData {
                         beam_length_max * beam_length_max,
                         ClosedInterval::Both,
                     ),
+            )
+            .collect()?;
+
+        if filtered_data_frame.height() == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(PointData::new_unchecked(filtered_data_frame)))
+    }
+
+    pub fn filter_by_x_min(&self, x_min: f64) -> Result<Option<PointData>, Error> {
+        let filtered_data_frame = self
+            .data_frame
+            .clone()
+            .lazy()
+            .filter(col(PointDataColumnType::X.as_str()).gt_eq(x_min))
+            .collect()?;
+
+        if filtered_data_frame.height() == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(PointData::new_unchecked(filtered_data_frame)))
+    }
+
+    pub fn filter_by_x_max(&self, x_max: f64) -> Result<Option<PointData>, Error> {
+        let filtered_data_frame = self
+            .data_frame
+            .clone()
+            .lazy()
+            .filter(col(PointDataColumnType::X.as_str()).lt_eq(lit(x_max)))
+            .collect()?;
+
+        if filtered_data_frame.height() == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(PointData::new_unchecked(filtered_data_frame)))
+    }
+
+    pub fn filter_by_y_min(&self, y_min: f64) -> Result<Option<PointData>, Error> {
+        let filtered_data_frame = self
+            .data_frame
+            .clone()
+            .lazy()
+            .filter(col(PointDataColumnType::Y.as_str()).gt_eq(y_min))
+            .collect()?;
+
+        if filtered_data_frame.height() == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(PointData::new_unchecked(filtered_data_frame)))
+    }
+
+    pub fn filter_by_y_max(&self, y_max: f64) -> Result<Option<PointData>, Error> {
+        let filtered_data_frame = self
+            .data_frame
+            .clone()
+            .lazy()
+            .filter(col(PointDataColumnType::Y.as_str()).lt_eq(lit(y_max)))
+            .collect()?;
+
+        if filtered_data_frame.height() == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(PointData::new_unchecked(filtered_data_frame)))
+    }
+
+    pub fn filter_by_z_min(&self, z_min: f64) -> Result<Option<PointData>, Error> {
+        let filtered_data_frame = self
+            .data_frame
+            .clone()
+            .lazy()
+            .filter(col(PointDataColumnType::Z.as_str()).gt_eq(z_min))
+            .collect()?;
+
+        if filtered_data_frame.height() == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(PointData::new_unchecked(filtered_data_frame)))
+    }
+
+    pub fn filter_by_z_max(&self, z_max: f64) -> Result<Option<PointData>, Error> {
+        let filtered_data_frame = self
+            .data_frame
+            .clone()
+            .lazy()
+            .filter(col(PointDataColumnType::Z.as_str()).lt_eq(lit(z_max)))
+            .collect()?;
+
+        if filtered_data_frame.height() == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(PointData::new_unchecked(filtered_data_frame)))
+    }
+
+    pub fn filter_by_spherical_range_min(
+        &self,
+        spherical_range_min: f64,
+    ) -> Result<Option<PointData>, Error> {
+        if !self.contains_spherical_range_column() {
+            return Err(Error::NoSphericalRangeColumn);
+        }
+
+        let filtered_data_frame = self
+            .data_frame
+            .clone()
+            .lazy()
+            .filter(col(PointDataColumnType::SphericalRange.as_str()).gt_eq(spherical_range_min))
+            .collect()?;
+
+        if filtered_data_frame.height() == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(PointData::new_unchecked(filtered_data_frame)))
+    }
+
+    pub fn filter_by_spherical_range_max(
+        &self,
+        spherical_range_max: f64,
+    ) -> Result<Option<PointData>, Error> {
+        if !self.contains_spherical_range_column() {
+            return Err(Error::NoSphericalRangeColumn);
+        }
+
+        let filtered_data_frame = self
+            .data_frame
+            .clone()
+            .lazy()
+            .filter(
+                col(PointDataColumnType::SphericalRange.as_str()).lt_eq(lit(spherical_range_max)),
+            )
+            .collect()?;
+
+        if filtered_data_frame.height() == 0 {
+            return Ok(None);
+        }
+
+        Ok(Some(PointData::new_unchecked(filtered_data_frame)))
+    }
+
+    pub fn filter_by_octant_index(&self, index: OctantIndex) -> Result<Option<PointData>, Error> {
+        if !self.contains_octant_indices() {
+            return Err(Error::NoOctantIndicesColumns);
+        }
+
+        let filtered_data_frame = self
+            .data_frame
+            .clone()
+            .lazy()
+            .filter(
+                col(PointDataColumnType::OctantIndexLevel.as_str())
+                    .eq(lit(index.level))
+                    .and(col(PointDataColumnType::OctantIndexX.as_str()).eq(lit(index.x)))
+                    .and(col(PointDataColumnType::OctantIndexY.as_str()).eq(lit(index.y)))
+                    .and(col(PointDataColumnType::OctantIndexZ.as_str()).eq(lit(index.z))),
             )
             .collect()?;
 
@@ -1088,13 +1689,6 @@ impl PointData {
         let graph = reference_frame.derive_transform_graph(&None, timestamp)?;
         let isometry = graph.get_isometry(&transform_id)?;
 
-        // println!("{:?}", frame_id);
-        //println!("{:?}.{:?}", timestamp_seconds, timestamp_nanoseconds);
-        //let temp_transform_id = TransformId::new(FrameId::from("slam_map"), FrameId::from("base_link"));
-        //let temp_isometry = graph.get_isometry(&temp_transform_id);
-        //println!("{:?}", temp_isometry);
-        //println!("");
-
         let transformed_points: Vec<Point3<f64>> = self
             .get_all_points()
             .par_iter()
@@ -1102,10 +1696,20 @@ impl PointData {
             .collect();
         self.update_points_in_place(transformed_points)?;
 
-        if let Ok(all_beam_origins) = &self.extract_beam_origins() {
-            let transformed_beam_origins: Vec<Point3<f64>> =
-                all_beam_origins.par_iter().map(|p| isometry * p).collect();
-            self.update_beam_origins_in_place(transformed_beam_origins)?;
+        if let Ok(all_sensor_translations) = &self.get_all_sensor_translations() {
+            let transformed_sensor_translations: Vec<Point3<f64>> = all_sensor_translations
+                .par_iter()
+                .map(|p| isometry * p)
+                .collect();
+            self.update_sensor_translations_in_place(transformed_sensor_translations)?;
+        }
+
+        if let Ok(all_sensor_rotations) = &self.get_all_sensor_rotations() {
+            let transformed_sensor_rotations: Vec<UnitQuaternion<f64>> = all_sensor_rotations
+                .par_iter()
+                .map(|r| isometry.rotation * r)
+                .collect();
+            self.update_sensor_rotations_in_place(transformed_sensor_rotations)?;
         }
 
         Ok(())

@@ -1,13 +1,13 @@
+use crate::Error::{FileNotFound, InvalidFileExtension, NoFileName};
 use crate::epoint::documents::EpointInfoDocument;
 use crate::epoint::read_impl::cast_data_frame;
 use crate::epoint::{
-    FILE_EXTENSION_EPOINT_COMPRESSED, FILE_EXTENSION_EPOINT_UNCOMPRESSED,
+    EPOINT_SEPARATOR, FILE_EXTENSION_EPOINT_FORMAT, FILE_EXTENSION_EPOINT_TAR_FORMAT,
     FILE_NAME_ECOORD_COMPRESSED, FILE_NAME_ECOORD_UNCOMPRESSED, FILE_NAME_INFO_COMPRESSED,
     FILE_NAME_INFO_UNCOMPRESSED, FILE_NAME_POINT_DATA_COMPRESSED,
     FILE_NAME_POINT_DATA_UNCOMPRESSED,
 };
 use crate::error::Error;
-use crate::Error::{FileNotFound, InvalidFileExtension, NoFileExtension};
 use ecoord::ReferenceFrames;
 use epoint_core::PointCloud;
 use epoint_core::PointCloudInfo;
@@ -53,7 +53,8 @@ impl<R: Read> EpointReader<R> {
                     f.read_to_end(&mut buffer)?;
                     let reader = Cursor::new(&buffer);
 
-                    let csv_parse_options = CsvParseOptions::default().with_separator(b' ');
+                    let csv_parse_options =
+                        CsvParseOptions::default().with_separator(EPOINT_SEPARATOR);
                     let data_frame: DataFrame = CsvReadOptions::default()
                         .with_parse_options(csv_parse_options)
                         .into_reader_with_file_handle(reader)
@@ -99,13 +100,16 @@ impl<R: Read> EpointReader<R> {
 
 impl EpointReader<File> {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
-        let extension = path.as_ref().extension().ok_or(NoFileExtension())?;
-        if extension != FILE_EXTENSION_EPOINT_UNCOMPRESSED
-            && extension != FILE_EXTENSION_EPOINT_COMPRESSED
+        let file_name_str = path
+            .as_ref()
+            .file_name()
+            .ok_or(NoFileName())?
+            .to_string_lossy()
+            .to_lowercase();
+        if !file_name_str.ends_with(FILE_EXTENSION_EPOINT_TAR_FORMAT)
+            && !file_name_str.ends_with(FILE_EXTENSION_EPOINT_FORMAT)
         {
-            return Err(InvalidFileExtension(
-                extension.to_str().unwrap_or_default().to_string(),
-            ));
+            return Err(InvalidFileExtension(file_name_str.to_string()));
         }
 
         let file = std::fs::File::open(path)?;

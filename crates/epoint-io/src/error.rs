@@ -3,6 +3,9 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
+    EpointIoE57Error(#[from] crate::e57::error::Error),
+
+    #[error(transparent)]
     EpointError(#[from] epoint_core::Error),
     #[error(transparent)]
     EcoordIo(#[from] ecoord::io::Error),
@@ -22,10 +25,16 @@ pub enum Error {
     #[error("file extension is invalid")]
     NoFileExtension(),
     #[error("file extension is invalid")]
+    NoFileName(),
+    #[error("file extension is invalid")]
     FileNotFound(String),
+    #[error("file extension is invalid")]
+    FormatNotSupported(String),
 
     #[error("file extension `{0}` is invalid")]
     InvalidFileExtension(String),
+    #[error("file extension `{0}` is unknown")]
+    UnknownFileExtension(String),
     #[error("invalid version of major={major} and minor={minor}")]
     InvalidVersion { major: u8, minor: u8 },
 

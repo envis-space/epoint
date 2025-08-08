@@ -9,14 +9,18 @@ description = "CLI tool for processing 3D point clouds."
 
 
 [dependencies]
-epoint = { version = "0.0.1-alpha.4", path = "../epoint" }
+epoint = { version = "0.0.1-alpha.8", path = "../epoint" }
 
+thiserror = { workspace = true }
+anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
+indicatif = { workspace = true }
+humantime = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 nalgebra = { workspace = true }
 walkdir = { workspace = true }
+rayon = { workspace = true }
 chrono = { workspace = true }
-
-# todo
-polars = { workspace = true, features = ["lazy", "parquet", "ndarray", "dtype-categorical", "dtype-u16", "strings", "partition_by", "is_between"] }
+polars = { workspace = true }

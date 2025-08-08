@@ -20,9 +20,6 @@ chrono = { workspace = true }
 rayon = { workspace = true }
 nalgebra = { workspace = true }
 itertools = { workspace = true }
-strum = { workspace = true }
-strum_macros = { workspace = true }
 approx = { workspace = true }
-indextree = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

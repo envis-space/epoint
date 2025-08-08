@@ -23,9 +23,9 @@
 //!                 - ROS uses [f32] and is thus preferred
 //!                 - LAS uses [u16]
 //!                 - PDAL uses [u16]
-//!             - `beam_origin_x` [f64]: Beam origin X coordinate of current laser shot
-//!             - `beam_origin_y` [f64]: Beam origin Y coordinate of current laser shot
-//!             - `beam_origin_z` [f64]: Beam origin Z coordinate of current laser shot
+//!             - `sensor_translation_x` [f64]: Sensor translation X coordinate
+//!             - `sensor_translation_y` [f64]: Sensor translation Y coordinate
+//!             - `sensor_translation_z` [f64]: Sensor translation Z coordinate
 //!             - `color_red` [u16]: Red image channel value
 //!             - `color_green` [u16]: Green image channel value
 //!             - `color_blue` [u16]: Blue image channel value
@@ -47,8 +47,7 @@
 //!
 
 pub use epoint_core::{
-    bounding_box, octree, Error, PointCloud, PointCloudInfo, PointData, PointDataColumnType,
-    PointDataColumns,
+    Error, PointCloud, PointCloudInfo, PointData, PointDataColumnType, PointDataColumns, octree,
 };
 
 pub use epoint_io as io;

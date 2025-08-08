@@ -1,6 +1,6 @@
-use crate::point_data::PointData;
 use crate::Error;
 use crate::Error::InvalidNumber;
+use crate::point_data::PointData;
 use polars::datatypes::BooleanChunked;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -41,7 +41,7 @@ fn generate_random_numbers(
 
     let mut numbers: HashSet<usize> = HashSet::with_capacity(len);
     while numbers.len() < len {
-        let n: usize = rng.gen_range(0..number_max);
+        let n: usize = rng.random_range(0..number_max);
         numbers.insert(n);
     }
     Ok(numbers)

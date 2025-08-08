@@ -9,8 +9,8 @@ description = "IO operations for processing 3D point clouds."
 
 
 [dependencies]
-epoint-core = { version = "0.0.1-alpha.4", path = "../epoint-core" }
-epoint-transform = { version = "0.0.1-alpha.4", path = "../epoint-transform" }
+epoint-core = { version = "0.0.1-alpha.8", path = "../epoint-core" }
+epoint-transform = { version = "0.0.1-alpha.8", path = "../epoint-transform" }
 
 ecoord = { workspace = true }
 
@@ -18,12 +18,12 @@ thiserror = { workspace = true }
 polars = { workspace = true, features = ["lazy", "parquet", "ndarray", "dtype-categorical", "dtype-u16", "dtype-u8", "partition_by"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-las = { workspace = true, features = ["laz"] }
+las = { workspace = true, features = ["laz-parallel"] }
+e57 = { workspace = true, features = ["crc32c"] }
 rayon = { workspace = true }
 palette = { workspace = true }
 tar = { workspace = true }
 zstd = { workspace = true }
-strum = { workspace = true }
-strum_macros = { workspace = true }
 chrono = { workspace = true }
+nalgebra = { workspace = true }
 

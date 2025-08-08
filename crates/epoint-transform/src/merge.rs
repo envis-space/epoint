@@ -1,10 +1,9 @@
 use ecoord::ReferenceFrames;
 use epoint_core::{PointCloud, PointCloudInfo, PointDataColumnType};
-use polars::datatypes::DataType;
-use polars::export::ahash::HashSet;
+use polars::datatypes::{DataType, PlHashSet};
 
 use crate::Error::{ContainsNoPoints, DifferentPointCloudInfos};
-use polars::prelude::{concat, IntoLazy, LazyFrame};
+use polars::prelude::{IntoLazy, LazyFrame, concat};
 
 use crate::error::Error;
 
@@ -12,7 +11,7 @@ pub fn merge(point_clouds: Vec<PointCloud>) -> Result<PointCloud, Error> {
     if point_clouds.is_empty() {
         return Err(ContainsNoPoints);
     }
-    let info_set: HashSet<&PointCloudInfo> = point_clouds.iter().map(|x| x.info()).collect();
+    let info_set: PlHashSet<&PointCloudInfo> = point_clouds.iter().map(|x| x.info()).collect();
     if info_set.len() > 1 {
         return Err(DifferentPointCloudInfos);
     }
@@ -34,7 +33,8 @@ pub fn merge(point_clouds: Vec<PointCloud>) -> Result<PointCloud, Error> {
                     .column(PointDataColumnType::FrameId.as_str())
                     .unwrap()
                     .cast(&DataType::String)
-                    .unwrap();
+                    .unwrap()
+                    .take_materialized_series();
                 df.replace(PointDataColumnType::FrameId.as_str(), casted)
                     .unwrap();
             }
@@ -47,12 +47,13 @@ pub fn merge(point_clouds: Vec<PointCloud>) -> Result<PointCloud, Error> {
         .collect()
         .unwrap();
 
-    let frame_id_series = merged_data_frame.column(PointDataColumnType::FrameId.as_str());
-    if let Ok(frame_id_series) = frame_id_series {
-        let casted = frame_id_series
+    let frame_id_column = merged_data_frame.column(PointDataColumnType::FrameId.as_str());
+    if let Ok(frame_id_column) = frame_id_column {
+        let casted = frame_id_column
             .to_owned()
             .cast(&DataType::Categorical(None, Default::default()))
-            .unwrap();
+            .unwrap()
+            .take_materialized_series();
         merged_data_frame
             .replace(PointDataColumnType::FrameId.as_str(), casted)
             .unwrap();

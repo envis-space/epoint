@@ -9,15 +9,16 @@ description = "Supplementary operations for processing 3D point clouds."
 
 
 [dependencies]
-epoint-core = { version = "0.0.1-alpha.4", path = "../epoint-core" }
+epoint-core = { version = "0.0.1-alpha.8", path = "../epoint-core" }
 
 ecoord = { workspace = true }
 
 thiserror = { workspace = true }
-polars = { workspace = true, features = ["lazy", "parquet", "ndarray"] }
+polars = { workspace = true, features = ["lazy", "parquet", "ndarray", "dtype-struct"] }
 palette = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rayon = { workspace = true }
 nalgebra = { workspace = true }
+

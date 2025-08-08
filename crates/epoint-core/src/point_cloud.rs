@@ -10,17 +10,17 @@ use nalgebra::Point3;
 
 use polars::prelude::DataFrame;
 
-use crate::point_data::PointData;
 use crate::Error::{
     MultipleFrameIdDefinitions, NoFrameIdDefinition, NoFrameIdDefinitions, NoIdColumn,
 };
+use crate::point_data::PointData;
 use polars::prelude::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PointCloud {
     pub point_data: PointData,
-    pub(crate) info: PointCloudInfo,
-    pub(crate) reference_frames: ReferenceFrames,
+    pub info: PointCloudInfo,
+    pub reference_frames: ReferenceFrames,
 }
 
 impl PointCloud {
@@ -120,8 +120,8 @@ impl PointCloud {
         self.point_data.contains_timestamps()
     }
 
-    pub fn contains_beam_origin(&self) -> bool {
-        self.point_data.contains_beam_origin()
+    pub fn contains_sensor_translation(&self) -> bool {
+        self.point_data.contains_sensor_translation()
     }
 
     pub fn contains_colors(&self) -> bool {
@@ -284,20 +284,175 @@ impl PointCloud {
 
         Ok(result)
     }
+
+    pub fn filter_by_x_min(&self, x_min: f64) -> Result<Option<PointCloud>, Error> {
+        let filtered_point_data = self.point_data.filter_by_x_min(x_min)?;
+
+        let result = if let Some(filtered_point_data) = filtered_point_data {
+            let filtered_point_cloud = PointCloud::from_data_frame(
+                filtered_point_data.data_frame,
+                self.info.clone(),
+                self.reference_frames.clone(),
+            )?;
+            Some(filtered_point_cloud)
+        } else {
+            None
+        };
+
+        Ok(result)
+    }
+
+    pub fn filter_by_x_max(&self, x_max: f64) -> Result<Option<PointCloud>, Error> {
+        let filtered_point_data = self.point_data.filter_by_x_max(x_max)?;
+
+        let result = if let Some(filtered_point_data) = filtered_point_data {
+            let filtered_point_cloud = PointCloud::from_data_frame(
+                filtered_point_data.data_frame,
+                self.info.clone(),
+                self.reference_frames.clone(),
+            )?;
+            Some(filtered_point_cloud)
+        } else {
+            None
+        };
+
+        Ok(result)
+    }
+
+    pub fn filter_by_y_min(&self, y_min: f64) -> Result<Option<PointCloud>, Error> {
+        let filtered_point_data = self.point_data.filter_by_y_min(y_min)?;
+
+        let result = if let Some(filtered_point_data) = filtered_point_data {
+            let filtered_point_cloud = PointCloud::from_data_frame(
+                filtered_point_data.data_frame,
+                self.info.clone(),
+                self.reference_frames.clone(),
+            )?;
+            Some(filtered_point_cloud)
+        } else {
+            None
+        };
+
+        Ok(result)
+    }
+
+    pub fn filter_by_y_max(&self, y_max: f64) -> Result<Option<PointCloud>, Error> {
+        let filtered_point_data = self.point_data.filter_by_y_max(y_max)?;
+
+        let result = if let Some(filtered_point_data) = filtered_point_data {
+            let filtered_point_cloud = PointCloud::from_data_frame(
+                filtered_point_data.data_frame,
+                self.info.clone(),
+                self.reference_frames.clone(),
+            )?;
+            Some(filtered_point_cloud)
+        } else {
+            None
+        };
+
+        Ok(result)
+    }
+
+    pub fn filter_by_z_min(&self, z_min: f64) -> Result<Option<PointCloud>, Error> {
+        let filtered_point_data = self.point_data.filter_by_z_min(z_min)?;
+
+        let result = if let Some(filtered_point_data) = filtered_point_data {
+            let filtered_point_cloud = PointCloud::from_data_frame(
+                filtered_point_data.data_frame,
+                self.info.clone(),
+                self.reference_frames.clone(),
+            )?;
+            Some(filtered_point_cloud)
+        } else {
+            None
+        };
+
+        Ok(result)
+    }
+
+    pub fn filter_by_z_max(&self, z_max: f64) -> Result<Option<PointCloud>, Error> {
+        let filtered_point_data = self.point_data.filter_by_z_max(z_max)?;
+
+        let result = if let Some(filtered_point_data) = filtered_point_data {
+            let filtered_point_cloud = PointCloud::from_data_frame(
+                filtered_point_data.data_frame,
+                self.info.clone(),
+                self.reference_frames.clone(),
+            )?;
+            Some(filtered_point_cloud)
+        } else {
+            None
+        };
+
+        Ok(result)
+    }
+
+    pub fn filter_by_spherical_range_min(
+        &self,
+        spherical_range_min: f64,
+    ) -> Result<Option<PointCloud>, Error> {
+        let filtered_point_data = self
+            .point_data
+            .filter_by_spherical_range_min(spherical_range_min)?;
+
+        let result = if let Some(filtered_point_data) = filtered_point_data {
+            let filtered_point_cloud = PointCloud::from_data_frame(
+                filtered_point_data.data_frame,
+                self.info.clone(),
+                self.reference_frames.clone(),
+            )?;
+            Some(filtered_point_cloud)
+        } else {
+            None
+        };
+
+        Ok(result)
+    }
+
+    pub fn filter_by_spherical_range_max(
+        &self,
+        spherical_range_max: f64,
+    ) -> Result<Option<PointCloud>, Error> {
+        let filtered_point_data = self
+            .point_data
+            .filter_by_spherical_range_max(spherical_range_max)?;
+
+        let result = if let Some(filtered_point_data) = filtered_point_data {
+            let filtered_point_cloud = PointCloud::from_data_frame(
+                filtered_point_data.data_frame,
+                self.info.clone(),
+                self.reference_frames.clone(),
+            )?;
+            Some(filtered_point_cloud)
+        } else {
+            None
+        };
+
+        Ok(result)
+    }
 }
 
 impl PointCloud {
+    pub fn append_reference_frames(
+        &mut self,
+        reference_frames: ReferenceFrames,
+    ) -> Result<(), ecoord::Error> {
+        let merged_reference_frames =
+            ecoord::merge(&[self.reference_frames.clone(), reference_frames])?;
+        self.set_reference_frames(merged_reference_frames);
+        Ok(())
+    }
+
     /// Resolves the frame-dependent and time-dependent points of the point cloud to a target frame.
     ///
     /// The points are partitioned by frame ids and timestamps and a coordinate transform is
     /// derived for each partition. It must be
     ///
+    /// See also: <https://stackoverflow.com/a/65287197>
     pub fn resolve_to_frame(&mut self, target_frame_id: FrameId) -> Result<(), Error> {
         if self.info.frame_id.is_none() && !self.point_data.contains_frame_id_column() {
             return Err(NoFrameIdDefinitions);
         }
-
-        // interesting: https://stackoverflow.com/a/65287197
 
         let mut partition_columns: Vec<&str> = Vec::new();
         if self.point_data.contains_frame_id_column() {
@@ -310,7 +465,7 @@ impl PointCloud {
             partition_columns.push(PointDataColumnType::TimestampNanoSeconds.as_str());
         }
 
-        let partitioned: Vec<DataFrame> = if partition_columns.is_empty() {
+        let partitioned_data_frames: Vec<DataFrame> = if partition_columns.is_empty() {
             vec![self.point_data.data_frame.clone()]
         } else {
             self.point_data
@@ -319,73 +474,60 @@ impl PointCloud {
                 .partition_by(partition_columns, true)?
         };
 
-        //
-        let partitioned: HashMap<(FrameId, Option<DateTime<Utc>>), DataFrame> = partitioned
-            .into_iter()
-            .map(|df| {
-                let point_data = PointData::new_unchecked(df);
-                // get either the frame id per point or the general frame id in the point cloud info
-                let frame_ids_series = point_data.extract_frame_ids();
-                let frame_id = frame_ids_series.map_or_else(
-                    |_| self.info.frame_id.clone().unwrap(),
-                    |f| f.first().unwrap().clone(),
-                );
+        let partitioned_data_frames: HashMap<(FrameId, Option<DateTime<Utc>>), DataFrame> =
+            partitioned_data_frames
+                .into_iter()
+                .map(|df| {
+                    let point_data = PointData::new_unchecked(df);
+                    // get either the frame id per point or the general frame id in the point cloud info
+                    let frame_ids_series = point_data.get_all_frame_ids();
+                    let frame_id = frame_ids_series.map_or_else(
+                        |_| self.info.frame_id.clone().unwrap(),
+                        |f| f.first().unwrap().clone(),
+                    );
 
-                let timestamp = point_data
-                    .extract_timestamps()
-                    .ok()
-                    .map(|t| *t.first().unwrap());
-                ((frame_id, timestamp), point_data.data_frame)
-            })
-            .collect();
+                    let timestamp = point_data
+                        .get_all_timestamps()
+                        .ok()
+                        .map(|t| *t.first().unwrap());
+                    ((frame_id, timestamp), point_data.data_frame)
+                })
+                .collect();
 
-        /*partitioned.sort_by_key(|k| {
-            k.column(PointDataColumnNames::TimestampSeconds.as_str())
-                .unwrap()
-                .i64()
-                .unwrap()
-                .get(0)
-                .unwrap()
-                * 1000000000
-                + k.column(PointDataColumnNames::TimestampNanoSeconds.as_str())
-                    .unwrap()
-                    .u32()
-                    .unwrap()
-                    .get(0)
-                    .unwrap() as i64
-        });*/
-
-        /*     let frame_id = data_frame_utils::extract_frame_ids(point_data)
-        .unwrap()
-        .first()
-        .unwrap()
-        .clone();*/
-
-        let partitioned: Vec<DataFrame> = partitioned
+        let partitioned_data_frames: Vec<DataFrame> = partitioned_data_frames
             .iter()
             .map(|((current_frame_id, current_timestamp), df)| {
                 let mut point_data = PointData::new_unchecked(df.clone());
-                point_data
-                    .resolve_data_frame(
-                        &self.reference_frames,
-                        current_timestamp,
-                        current_frame_id,
-                        &target_frame_id,
-                    )
-                    .unwrap();
+                let r = point_data.resolve_data_frame(
+                    &self.reference_frames,
+                    current_timestamp,
+                    current_frame_id,
+                    &target_frame_id,
+                );
+                if r.is_err() {
+                    print!(
+                        "should work: current_frame_id = {current_frame_id:?}, target_frame_id: {target_frame_id:?}"
+                    );
+                    println!(
+                        "all available frame ids: {:?}",
+                        &self.reference_frames.get_frame_ids()
+                    );
+                    panic!("error");
+                }
 
                 point_data.data_frame
             })
             .collect();
-        // dbg!(&partitioned);
 
-        let partitioned_lazy: Vec<LazyFrame> =
-            partitioned.iter().map(|d| d.clone().lazy()).collect();
+        let partitioned_lazy: Vec<LazyFrame> = partitioned_data_frames
+            .iter()
+            .map(|d| d.clone().lazy())
+            .collect();
 
         let mut merged_again = concat(partitioned_lazy, Default::default())
-            .unwrap()
+            .expect("concatenation should work")
             .collect()
-            .unwrap();
+            .expect("concatenation should work");
 
         // sort by timestamp, if available without id
         if merged_again

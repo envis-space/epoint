@@ -2,9 +2,10 @@ use crate::error::Error;
 
 use epoint_core::point_cloud::PointCloud;
 
-use crate::xyz::read_impl::read_point_cloud_from_xyz_file;
 use crate::Error::{InvalidFileExtension, NoFileExtension};
 use crate::FILE_EXTENSION_XYZ_FORMAT;
+use crate::xyz::DEFAULT_XYZ_SEPARATOR;
+use crate::xyz::read_impl::read_point_cloud_from_xyz_file;
 use std::path::{Path, PathBuf};
 
 /// `XyzReader` imports a point cloud from an XYZ file.
@@ -16,11 +17,11 @@ pub struct XyzReader {
 }
 
 impl XyzReader {
-    pub fn new(path: impl AsRef<Path>) -> Self {
-        Self {
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
+        Ok(Self {
             path: path.as_ref().to_owned(),
-            separator: b' ',
-        }
+            separator: DEFAULT_XYZ_SEPARATOR,
+        })
     }
 
     pub fn with_separator(mut self, separator: u8) -> Self {

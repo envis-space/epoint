@@ -15,14 +15,14 @@ pub fn translate(point_cloud: &PointCloud, translation: Vector3<f64>) -> Result<
     translated_data.apply(PointDataColumnType::Y.as_str(), |y| y + translation.y)?;
     translated_data.apply(PointDataColumnType::Z.as_str(), |z| z + translation.z)?;
 
-    if point_cloud.contains_beam_origin() {
-        translated_data.apply(PointDataColumnType::BeamOriginX.as_str(), |x| {
+    if point_cloud.contains_sensor_translation() {
+        translated_data.apply(PointDataColumnType::SensorTranslationX.as_str(), |x| {
             x + translation.x
         })?;
-        translated_data.apply(PointDataColumnType::BeamOriginY.as_str(), |y| {
+        translated_data.apply(PointDataColumnType::SensorTranslationY.as_str(), |y| {
             y + translation.y
         })?;
-        translated_data.apply(PointDataColumnType::BeamOriginZ.as_str(), |z| {
+        translated_data.apply(PointDataColumnType::SensorTranslationZ.as_str(), |z| {
             z + translation.z
         })?;
     }
@@ -48,13 +48,15 @@ pub fn apply_isometry(
         .point_data
         .update_points_in_place(transformed_points)?;
 
-    if let Ok(all_beam_origins) = point_cloud.point_data.get_all_beam_origins() {
-        let transformed_beam_origins: Vec<Point3<f64>> =
-            all_beam_origins.par_iter().map(|p| isometry * p).collect();
+    if let Ok(all_sensor_translations) = point_cloud.point_data.get_all_sensor_translations() {
+        let transformed_sensor_translations: Vec<Point3<f64>> = all_sensor_translations
+            .par_iter()
+            .map(|p| isometry * p)
+            .collect();
 
         transformed_point_cloud
             .point_data
-            .update_beam_origins_in_place(transformed_beam_origins)?;
+            .update_sensor_translations_in_place(transformed_sensor_translations)?;
     }
 
     Ok(transformed_point_cloud)
@@ -66,7 +68,7 @@ pub fn deterministic_downsample(
     seed_number: Option<u64>,
 ) -> Result<PointCloud, Error> {
     if point_cloud.size() < target_size {
-        return Err(InvalidNumber);
+        return Ok(point_cloud.clone());
     }
 
     let rng = ChaCha8Rng::seed_from_u64(seed_number.unwrap_or_default());
@@ -87,7 +89,7 @@ fn generate_random_numbers(
 
     let mut numbers: HashSet<usize> = HashSet::with_capacity(len);
     while numbers.len() < len {
-        let n: usize = rng.gen_range(0..number_max);
+        let n: usize = rng.random_range(0..number_max);
         numbers.insert(n);
     }
     Ok(numbers)

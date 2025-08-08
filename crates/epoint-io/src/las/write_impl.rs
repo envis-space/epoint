@@ -1,7 +1,7 @@
 use crate::Error;
 use chrono::{TimeZone, Timelike, Utc};
 use epoint_core::PointCloud;
-use las::{GpsTimeType, Write};
+use las::GpsTimeType;
 use rayon::prelude::*;
 use std::fmt::Debug;
 use std::io::Seek;
@@ -32,16 +32,14 @@ pub fn write_las_format<W: 'static + std::io::Write + Seek + Debug + Send>(
     let mut las_writer = las::Writer::new(writer, header)?;
 
     let converted_timestamps = if point_cloud.contains_timestamps() {
-        // this calculation should be adjusted gps time (see: https://groups.google.com/g/lastools/c/_9TxnjoghGM)
-        let base_time = Utc.with_ymd_and_hms(1980, 1, 6, 0, 0, 0).unwrap(); // `2014-07-08T09:10:11Z`
+        // this calculation should be the adjusted gps time (see: https://groups.google.com/g/lastools/c/_9TxnjoghGM)
+        // GPS time: https://en.wikipedia.org/wiki/Global_Positioning_System#Timekeeping
+        let base_time = Utc.with_ymd_and_hms(1980, 1, 6, 0, 0, 0).unwrap();
         let values: Vec<f64> = point_cloud
             .point_data
             .get_all_timestamps()?
             .par_iter()
-            .map(|t| {
-                ((*t - base_time).num_seconds() - 1_000_000_000) as f64
-                    + (t.nanosecond() as f64 / 1.0e-9)
-            })
+            .map(|t| ((*t - base_time).num_seconds()) as f64 + (t.nanosecond() as f64 * 1.0e-9))
             .collect();
         Some(values)
     } else {
@@ -81,7 +79,7 @@ pub fn write_las_format<W: 'static + std::io::Write + Seek + Debug + Send>(
         .collect();
 
     for current_point in converted_points {
-        las_writer.write(current_point)?;
+        las_writer.write_point(current_point)?;
     }
 
     las_writer.close()?;

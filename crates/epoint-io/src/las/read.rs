@@ -1,4 +1,4 @@
-use crate::las::read_impl::import_point_cloud_from_las_file;
+use crate::las::read_impl::import_point_cloud_from_las_reader;
 use crate::{Error, FILE_EXTENSION_LAS_FORMAT, FILE_EXTENSION_LAZ_FORMAT};
 
 use crate::las::LasVersion;
@@ -18,7 +18,7 @@ pub struct LasReader<R: Read + Seek + Send + Debug> {
     normalize_colors: bool,
 }
 
-impl<R: Read + Seek + Send + Debug> LasReader<R> {
+impl<R: Read + Seek + Send + 'static + Debug> LasReader<R> {
     /// Create a new [`LasReader`] from an existing `Reader`.
     pub fn new(reader: R) -> Self {
         Self {
@@ -33,7 +33,7 @@ impl<R: Read + Seek + Send + Debug> LasReader<R> {
     }
 
     pub fn finish(self) -> Result<(PointCloud, LasReadInfo), Error> {
-        let point_cloud = import_point_cloud_from_las_file(self.reader, self.normalize_colors)?;
+        let point_cloud = import_point_cloud_from_las_reader(self.reader, self.normalize_colors)?;
         Ok(point_cloud)
     }
 }

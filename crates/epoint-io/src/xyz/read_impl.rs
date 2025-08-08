@@ -39,60 +39,63 @@ pub fn read_data_frame_from_xyz_file(
     // TODO: maybe add all fields
     let schema_modifier = |mut schema: Schema| {
         if schema.contains(PointDataColumnType::Id.as_str()) {
-            schema.with_column(PointDataColumnType::Id.as_str().into(), DataType::UInt64);
+            schema.with_column(
+                PointDataColumnType::Id.as_str().into(),
+                PointDataColumnType::Id.data_frame_data_type(),
+            );
         }
         if schema.contains(PointDataColumnType::FrameId.as_str()) {
             schema.with_column(
                 PointDataColumnType::FrameId.as_str().into(),
-                DataType::Categorical(None, Default::default()),
+                PointDataColumnType::FrameId.data_frame_data_type(),
             );
         }
 
         if schema.contains(PointDataColumnType::TimestampNanoSeconds.as_str()) {
             schema.with_column(
                 PointDataColumnType::TimestampNanoSeconds.as_str().into(),
-                DataType::UInt32,
+                PointDataColumnType::TimestampNanoSeconds.data_frame_data_type(),
             );
         }
 
         if schema.contains(PointDataColumnType::Intensity.as_str()) {
             schema.with_column(
                 PointDataColumnType::Intensity.as_str().into(),
-                DataType::Float32,
+                PointDataColumnType::Intensity.data_frame_data_type(),
             );
         }
 
         if schema.contains(PointDataColumnType::ColorRed.as_str()) {
             schema.with_column(
                 PointDataColumnType::ColorRed.as_str().into(),
-                DataType::UInt16,
+                PointDataColumnType::ColorRed.data_frame_data_type(),
             );
         }
         if schema.contains(PointDataColumnType::ColorGreen.as_str()) {
             schema.with_column(
                 PointDataColumnType::ColorGreen.as_str().into(),
-                DataType::UInt16,
+                PointDataColumnType::ColorGreen.data_frame_data_type(),
             );
         }
         if schema.contains(PointDataColumnType::ColorBlue.as_str()) {
             schema.with_column(
                 PointDataColumnType::ColorBlue.as_str().into(),
-                DataType::UInt16,
+                PointDataColumnType::ColorBlue.data_frame_data_type(),
             );
         }
 
         Ok(schema)
     };
 
-    let data_frame = LazyCsvReader::new(file_path)
+    let data_frame = LazyCsvReader::new(&file_path)
         .with_separator(separator)
         .with_schema_modify(schema_modifier)?
         .finish()?
         .select([all()])
         .collect()?;
 
-    let _frame_id_series = data_frame.column(PointDataColumnType::FrameId.as_str());
-    /*if let Ok(frame_id_series) = frame_id_series {
+    /*let _frame_id_series = data_frame.column(PointDataColumnType::FrameId.as_str());
+    if let Ok(frame_id_series) = frame_id_series {
         let casted = frame_id_series
             .to_owned()
             .cast(&DataType::Categorical(None))

@@ -1,23 +1,21 @@
 use crate::epoint::documents::EpointInfoDocument;
 use crate::epoint::{
-    FILE_NAME_ECOORD_COMPRESSED, FILE_NAME_ECOORD_UNCOMPRESSED, FILE_NAME_INFO_COMPRESSED,
-    FILE_NAME_INFO_UNCOMPRESSED, FILE_NAME_POINT_DATA_COMPRESSED,
+    EPOINT_SEPARATOR, FILE_NAME_ECOORD_COMPRESSED, FILE_NAME_ECOORD_UNCOMPRESSED,
+    FILE_NAME_INFO_COMPRESSED, FILE_NAME_INFO_UNCOMPRESSED, FILE_NAME_POINT_DATA_COMPRESSED,
     FILE_NAME_POINT_DATA_UNCOMPRESSED,
 };
 use crate::error::Error;
+use chrono::{DateTime, Utc};
 use epoint_core::PointCloud;
-use polars::export::chrono;
-use polars::export::chrono::Utc;
 use polars::prelude::{CsvWriter, ParquetWriter, SerWriter, StatisticsOptions};
 use std::io::{Cursor, Write};
-
 use tar::Builder;
 
 pub fn write_epoint_format<W: Write>(
     writer: W,
     mut point_cloud: PointCloud,
     compression_level: Option<i32>,
-    time: Option<chrono::DateTime<Utc>>,
+    time: Option<DateTime<Utc>>,
 ) -> Result<(), Error> {
     let mut archive_builder = Builder::new(writer);
 
@@ -85,7 +83,7 @@ pub fn write_epoint_format<W: Write>(
         )?;
     } else {
         CsvWriter::new(&mut point_data_buffer)
-            .with_separator(b' ')
+            .with_separator(EPOINT_SEPARATOR)
             .finish(&mut point_cloud.point_data.data_frame)?;
         archive_builder.append_data(
             &mut create_archive_header(point_data_buffer.len(), time),

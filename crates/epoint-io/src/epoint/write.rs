@@ -1,9 +1,9 @@
+use crate::Error::{InvalidFileExtension, NoFileName};
 use crate::epoint::write_impl::write_epoint_format;
-use crate::epoint::{FILE_EXTENSION_EPOINT_COMPRESSED, FILE_EXTENSION_EPOINT_UNCOMPRESSED};
+use crate::epoint::{FILE_EXTENSION_EPOINT_FORMAT, FILE_EXTENSION_EPOINT_TAR_FORMAT};
 use crate::error::Error;
-use crate::Error::{InvalidFileExtension, NoFileExtension};
+use chrono::{DateTime, Utc};
 use epoint_core::PointCloud;
-use polars::export::chrono::{DateTime, Utc};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
@@ -51,13 +51,16 @@ impl<W: Write> EpointWriter<W> {
 
 impl EpointWriter<File> {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, Error> {
-        let extension = path.as_ref().extension().ok_or(NoFileExtension())?;
-        if extension != FILE_EXTENSION_EPOINT_UNCOMPRESSED
-            && extension != FILE_EXTENSION_EPOINT_COMPRESSED
+        let file_name_str = path
+            .as_ref()
+            .file_name()
+            .ok_or(NoFileName())?
+            .to_string_lossy()
+            .to_lowercase();
+        if !file_name_str.ends_with(FILE_EXTENSION_EPOINT_TAR_FORMAT)
+            && !file_name_str.ends_with(FILE_EXTENSION_EPOINT_FORMAT)
         {
-            return Err(InvalidFileExtension(
-                extension.to_str().unwrap_or_default().to_string(),
-            ));
+            return Err(InvalidFileExtension(file_name_str.to_string()));
         }
 
         let file = OpenOptions::new()
