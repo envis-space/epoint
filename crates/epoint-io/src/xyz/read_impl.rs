@@ -51,10 +51,10 @@ pub fn read_data_frame_from_xyz_file(
             );
         }
 
-        if schema.contains(PointDataColumnType::TimestampNanoSeconds.as_str()) {
+        if schema.contains(PointDataColumnType::TimestampNanoSecond.as_str()) {
             schema.with_column(
-                PointDataColumnType::TimestampNanoSeconds.as_str().into(),
-                PointDataColumnType::TimestampNanoSeconds.data_frame_data_type(),
+                PointDataColumnType::TimestampNanoSecond.as_str().into(),
+                PointDataColumnType::TimestampNanoSecond.data_frame_data_type(),
             );
         }
 
@@ -87,11 +87,12 @@ pub fn read_data_frame_from_xyz_file(
         Ok(schema)
     };
 
-    let data_frame = LazyCsvReader::new(&file_path)
+    let file_polars_path: PlPath = PlPath::Local(Arc::from(file_path.as_ref()));
+    let data_frame = LazyCsvReader::new(file_polars_path)
         .with_separator(separator)
         .with_schema_modify(schema_modifier)?
         .finish()?
-        .select([all()])
+        .select([all().as_expr()])
         .collect()?;
 
     /*let _frame_id_series = data_frame.column(PointDataColumnType::FrameId.as_str());

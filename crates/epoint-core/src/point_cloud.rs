@@ -1,10 +1,9 @@
 use crate::error::Error;
+use crate::{PointCloudInfo, PointDataColumnType, PointDataColumns};
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 
-use crate::{PointCloudInfo, PointDataColumnType, PointDataColumns};
-
-use ecoord::{FrameId, ReferenceFrames};
+use ecoord::{FrameId, ReferenceFrames, TransformId};
 use nalgebra;
 use nalgebra::Point3;
 
@@ -15,6 +14,7 @@ use crate::Error::{
 };
 use crate::point_data::PointData;
 use polars::prelude::*;
+use rayon::prelude::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PointCloud {
@@ -38,10 +38,8 @@ impl PointCloud {
             return Err(MultipleFrameIdDefinitions);
         }
 
-        let point_data_new = PointData::new(point_data)?; // TODO: simplify
-
         Ok(Self {
-            point_data: point_data_new,
+            point_data: PointData::new(point_data)?,
             info,
             reference_frames,
         })
@@ -59,10 +57,9 @@ impl PointCloud {
         {
             return Err(MultipleFrameIdDefinitions);
         }
-        let point_data_new = PointData::new(point_data)?; // TODO: simplify
 
         Ok(Self {
-            point_data: point_data_new,
+            point_data: PointData::new(point_data)?,
             info,
             reference_frames,
         })
@@ -459,10 +456,10 @@ impl PointCloud {
             partition_columns.push(PointDataColumnType::FrameId.as_str());
         }
         if self.point_data.contains_timestamp_sec_column() {
-            partition_columns.push(PointDataColumnType::TimestampSeconds.as_str());
+            partition_columns.push(PointDataColumnType::TimestampSecond.as_str());
         }
         if self.point_data.contains_timestamp_nanosec_column() {
-            partition_columns.push(PointDataColumnType::TimestampNanoSeconds.as_str());
+            partition_columns.push(PointDataColumnType::TimestampNanoSecond.as_str());
         }
 
         let partitioned_data_frames: Vec<DataFrame> = if partition_columns.is_empty() {
@@ -531,10 +528,10 @@ impl PointCloud {
 
         // sort by timestamp, if available without id
         if merged_again
-            .column(PointDataColumnType::TimestampSeconds.as_str())
+            .column(PointDataColumnType::TimestampSecond.as_str())
             .is_ok()
             && merged_again
-                .column(PointDataColumnType::TimestampNanoSeconds.as_str())
+                .column(PointDataColumnType::TimestampNanoSecond.as_str())
                 .is_ok()
             && merged_again
                 .column(PointDataColumnType::FrameId.as_str())
@@ -543,8 +540,8 @@ impl PointCloud {
             merged_again = merged_again
                 .sort(
                     [
-                        PointDataColumnType::TimestampSeconds.as_str(),
-                        PointDataColumnType::TimestampNanoSeconds.as_str(),
+                        PointDataColumnType::TimestampSecond.as_str(),
+                        PointDataColumnType::TimestampNanoSecond.as_str(),
                     ],
                     SortMultipleOptions::default().with_maintain_order(true),
                 )
@@ -565,6 +562,35 @@ impl PointCloud {
 
         self.point_data.data_frame = merged_again;
         self.info.frame_id = Some(target_frame_id);
+
+        Ok(())
+    }
+
+    /// Adds sensor pose information to the point cloud from a specified reference frame.
+    ///
+    /// This method computes the transformation (isometry) from the point cloud's reference frame
+    /// to the specified sensor frame for each timestamp in the point cloud data. The resulting
+    /// sensor poses are then added to the point data as additional columns.
+    pub fn add_sensor_poses_from_frame(&mut self, frame_id: FrameId) -> Result<(), Error> {
+        let timestamps: Vec<DateTime<Utc>> = self.point_data.get_all_timestamps()?;
+        let transform_id = TransformId::new(self.info.frame_id.clone().unwrap(), frame_id);
+
+        let unique_timestamps: HashSet<_> = timestamps.iter().collect();
+
+        let isometry_map: HashMap<_, _> = unique_timestamps
+            .into_par_iter()
+            .map(|current_timestamp| {
+                let isometry_graph = self
+                    .reference_frames
+                    .derive_transform_graph(&None, &Some(*current_timestamp))?;
+                let isometry = isometry_graph.get_isometry(&transform_id)?;
+                Ok((current_timestamp, isometry))
+            })
+            .collect::<Result<HashMap<_, _>, Error>>()?;
+
+        let isometries: Vec<_> = timestamps.iter().map(|ts| isometry_map[ts]).collect();
+
+        self.point_data.add_sensor_poses(isometries)?;
 
         Ok(())
     }

@@ -5,6 +5,7 @@ use crate::las::LasVersion;
 use epoint_core::PointCloud;
 
 use crate::Error::{InvalidFileExtension, NoFileExtension};
+use ecoord::FrameId;
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{Read, Seek};
@@ -15,7 +16,9 @@ use std::path::Path;
 #[derive(Debug, Clone)]
 pub struct LasReader<R: Read + Seek + Send + Debug> {
     reader: R,
+    sidecar_ecoord_reader: Option<R>,
     normalize_colors: bool,
+    world_frame_id: FrameId,
 }
 
 impl<R: Read + Seek + Send + 'static + Debug> LasReader<R> {
@@ -23,7 +26,9 @@ impl<R: Read + Seek + Send + 'static + Debug> LasReader<R> {
     pub fn new(reader: R) -> Self {
         Self {
             reader,
+            sidecar_ecoord_reader: None,
             normalize_colors: false,
+            world_frame_id: "world".into(),
         }
     }
 
@@ -32,9 +37,24 @@ impl<R: Read + Seek + Send + 'static + Debug> LasReader<R> {
         self
     }
 
+    pub fn with_sidecar_ecoord_reader(mut self, reader: Option<R>) -> Self {
+        self.sidecar_ecoord_reader = reader;
+        self
+    }
+
     pub fn finish(self) -> Result<(PointCloud, LasReadInfo), Error> {
-        let point_cloud = import_point_cloud_from_las_reader(self.reader, self.normalize_colors)?;
-        Ok(point_cloud)
+        let (mut point_cloud, read_info) = import_point_cloud_from_las_reader(
+            self.reader,
+            self.normalize_colors,
+            self.world_frame_id,
+        )?;
+
+        if let Some(reader) = self.sidecar_ecoord_reader {
+            let reference_frames = ecoord::io::EcoordReader::new(reader).finish()?;
+            point_cloud.append_reference_frames(reference_frames)?;
+        }
+
+        Ok((point_cloud, read_info))
     }
 }
 
@@ -47,8 +67,20 @@ impl LasReader<File> {
             ));
         }
 
+        // read sidecar ecoord file if available
+        let sidecar_ecoord_path = path
+            .as_ref()
+            .with_extension(ecoord::io::FILE_EXTENSION_ECOORD_FORMAT);
+        let sidecar_ecoord_reader = if sidecar_ecoord_path.exists() {
+            Some(File::open(&sidecar_ecoord_path)?)
+        } else {
+            None
+        };
+
         let file = File::open(path)?;
-        Ok(Self::new(file))
+        let las_reader = Self::new(file).with_sidecar_ecoord_reader(sidecar_ecoord_reader);
+
+        Ok(las_reader)
     }
 }
 

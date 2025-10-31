@@ -42,16 +42,13 @@ pub fn merge(point_clouds: Vec<PointCloud>) -> Result<PointCloud, Error> {
             df.lazy()
         })
         .collect();
-    let mut merged_data_frame = concat(data_frame, Default::default())
-        .unwrap()
-        .collect()
-        .unwrap();
+    let mut merged_data_frame = concat(data_frame, Default::default())?.collect()?;
 
     let frame_id_column = merged_data_frame.column(PointDataColumnType::FrameId.as_str());
     if let Ok(frame_id_column) = frame_id_column {
         let casted = frame_id_column
             .to_owned()
-            .cast(&DataType::Categorical(None, Default::default()))
+            .cast(&PointDataColumnType::FrameId.data_frame_data_type())
             .unwrap()
             .take_materialized_series();
         merged_data_frame

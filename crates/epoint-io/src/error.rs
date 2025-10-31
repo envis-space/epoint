@@ -8,7 +8,9 @@ pub enum Error {
     #[error(transparent)]
     EpointError(#[from] epoint_core::Error),
     #[error(transparent)]
-    EcoordIo(#[from] ecoord::io::Error),
+    EcoordError(#[from] ecoord::Error),
+    #[error(transparent)]
+    EcoordIoError(#[from] ecoord::io::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]

@@ -1,9 +1,8 @@
-use crate::Error::{NoData, ShapeMisMatch};
+use crate::Error::{NoData, ShapeMismatch};
 use crate::{Error, PointDataColumnType};
 use chrono::{DateTime, Timelike, Utc};
 use nalgebra::Point3;
 use palette::Srgb;
-use polars::datatypes::DataType;
 use polars::frame::DataFrame;
 use polars::prelude::{Column, NamedFrom};
 
@@ -35,42 +34,42 @@ impl PointDataColumns {
         if let Some(id) = &id
             && id.len() != total_length
         {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "id vector has a different length than the point vector",
             ));
         }
         if let Some(frame_id_entries) = &frame_id
             && frame_id_entries.len() != total_length
         {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "frame_id vector has a different length than the point vector",
             ));
         }
         if let Some(timestamp_entries) = &timestamp
             && timestamp_entries.len() != total_length
         {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "frame_id vector has a different length than the point vector",
             ));
         }
         if let Some(intensity_entries) = &intensity
             && intensity_entries.len() != total_length
         {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "intensity vector has a different length than the point vector",
             ));
         }
         if let Some(sensor_translation_entries) = &sensor_translation
             && sensor_translation_entries.len() != total_length
         {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "sensor_translation vector has a different length than the point vector",
             ));
         }
         if let Some(color_entries) = &color
             && color_entries.len() != total_length
         {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "color vector has a different length than the point vector",
             ));
         }
@@ -105,14 +104,14 @@ impl PointDataColumns {
         if let Some(frame_id) = &self.frame_id {
             let frame_id_column = Column::new(PointDataColumnType::FrameId.into(), frame_id);
             let frame_id_column = frame_id_column
-                .cast(&DataType::Categorical(None, Default::default()))
+                .cast(&PointDataColumnType::FrameId.data_frame_data_type())
                 .unwrap();
             columns.push(frame_id_column);
         }
 
         if let Some(timestamp_entries) = &self.timestamp {
             let timestamp_seconds_column = Column::new(
-                PointDataColumnType::TimestampSeconds.into(),
+                PointDataColumnType::TimestampSecond.into(),
                 timestamp_entries
                     .iter()
                     .map(|t| t.timestamp())
@@ -121,7 +120,7 @@ impl PointDataColumns {
             columns.push(timestamp_seconds_column);
 
             let timestamp_nanoseconds_column = Column::new(
-                PointDataColumnType::TimestampNanoSeconds.into(),
+                PointDataColumnType::TimestampNanoSecond.into(),
                 timestamp_entries
                     .iter()
                     .map(|t| t.nanosecond())

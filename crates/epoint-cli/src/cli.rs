@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum, ValueHint};
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[clap(author, version, about, long_about = None, propagate_version = true)]
@@ -13,18 +14,18 @@ pub enum Commands {
     Statistics {
         /// Input directory
         #[clap(short, long, value_hint = ValueHint::FilePath)]
-        file_path: String,
+        file_path: PathBuf,
     },
 
     /// Compute some statistics about the dataset
     Offset {
         /// Input directory
         #[clap(short, long, value_hint = ValueHint::DirPath)]
-        input_directory: String,
+        input_directory: PathBuf,
 
         /// Path to the output directory
         #[clap(short, long, value_hint = ValueHint::DirPath)]
-        output_directory: String,
+        output_directory: PathBuf,
 
         /// Offset point cloud
         #[clap(
@@ -40,22 +41,11 @@ pub enum Commands {
     Merge {
         /// Input directory
         #[clap(short, long, value_hint = ValueHint::DirPath)]
-        input_directory: String,
+        input_directory: PathBuf,
 
         /// Path to the output file
         #[clap(short, long, value_hint = ValueHint::DirPath)]
-        output_file: String,
-    },
-
-    /// Run some tests
-    Test {
-        /// Input directory
-        #[clap(long, value_hint = ValueHint::DirPath)]
-        input_path: String,
-
-        /// Output directory
-        #[clap(long, value_hint = ValueHint::DirPath)]
-        output_directory_path: String,
+        output_file: PathBuf,
     },
 }
 

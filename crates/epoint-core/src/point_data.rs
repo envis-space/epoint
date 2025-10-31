@@ -1,7 +1,7 @@
 use crate::Error;
 use crate::Error::{
-    ColumnAlreadyExists, ColumnNameMisMatch, LowerBoundEqualsUpperBound,
-    LowerBoundExceedsUpperBound, NoData, ObligatoryColumn, ShapeMisMatch, TypeMisMatch,
+    ColumnAlreadyExists, LowerBoundEqualsUpperBound, LowerBoundExceedsUpperBound, NoData,
+    ObligatoryColumn, ShapeMismatch, TypeMismatch,
 };
 use chrono::{DateTime, TimeZone, Utc};
 use ecoord::octree::OctantIndex;
@@ -26,9 +26,9 @@ const COLUMN_NAME_INTENSITY_STR: &str = "intensity";
 const COLUMN_NAME_SENSOR_TRANSLATION_X_STR: &str = "sensor_translation_x";
 const COLUMN_NAME_SENSOR_TRANSLATION_Y_STR: &str = "sensor_translation_y";
 const COLUMN_NAME_SENSOR_TRANSLATION_Z_STR: &str = "sensor_translation_z";
-const COLUMN_NAME_SENSOR_ROTATION_I_STR: &str = "sensor_rotation_i";
-const COLUMN_NAME_SENSOR_ROTATION_J_STR: &str = "sensor_rotation_j";
-const COLUMN_NAME_SENSOR_ROTATION_K_STR: &str = "sensor_rotation_k";
+const COLUMN_NAME_SENSOR_ROTATION_X_STR: &str = "sensor_rotation_x";
+const COLUMN_NAME_SENSOR_ROTATION_Y_STR: &str = "sensor_rotation_y";
+const COLUMN_NAME_SENSOR_ROTATION_Z_STR: &str = "sensor_rotation_z";
 const COLUMN_NAME_SENSOR_ROTATION_W_STR: &str = "sensor_rotation_w";
 const COLUMN_NAME_COLOR_RED_STR: &str = "color_red";
 const COLUMN_NAME_COLOR_GREEN_STR: &str = "color_green";
@@ -40,6 +40,7 @@ const COLUMN_NAME_OCTANT_INDEX_LEVEL_STR: &str = "octant_index_level";
 const COLUMN_NAME_OCTANT_INDEX_X_STR: &str = "octant_index_x";
 const COLUMN_NAME_OCTANT_INDEX_Y_STR: &str = "octant_index_y";
 const COLUMN_NAME_OCTANT_INDEX_Z_STR: &str = "octant_index_z";
+const COLUMN_NAME_POINT_SOURCE_ID_STR: &str = "point_source_id";
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum PointDataColumnType {
@@ -54,9 +55,9 @@ pub enum PointDataColumnType {
     /// Coordinate frame the point is defined in (optional)
     FrameId,
     /// UNIX timestamp: non-leap seconds since January 1, 1970 0:00:00 UTC (optional)
-    TimestampSeconds,
+    TimestampSecond,
     /// Nanoseconds since the last whole non-leap second
-    TimestampNanoSeconds,
+    TimestampNanoSecond,
     /// Representation of the pulse return magnitude
     Intensity,
     /// Sensor translation X coordinate
@@ -65,12 +66,12 @@ pub enum PointDataColumnType {
     SensorTranslationY,
     /// Sensor translation Z coordinate
     SensorTranslationZ,
-    /// Sensor rotation I coordinate
-    SensorRotationI,
-    /// Sensor rotation J coordinate
-    SensorRotationJ,
-    /// Sensor rotation K coordinate
-    SensorRotationK,
+    /// Sensor rotation X coordinate
+    SensorRotationX,
+    /// Sensor rotation Y coordinate
+    SensorRotationY,
+    /// Sensor rotation Z coordinate
+    SensorRotationZ,
     /// Sensor rotation W coordinate
     SensorRotationW,
     /// Red image channel value
@@ -93,6 +94,9 @@ pub enum PointDataColumnType {
     OctantIndexY,
     /// Z index of octant
     OctantIndexZ,
+    /// Indicates the source from which this point originated (e.g., flight line, sortie number, route number, or setup identifier)
+    /// Valid values: 1-65,535; zero is reserved.
+    PointSourceId,
 }
 
 impl std::str::FromStr for PointDataColumnType {
@@ -105,8 +109,8 @@ impl std::str::FromStr for PointDataColumnType {
             COLUMN_NAME_Z_STR => Ok(PointDataColumnType::Z),
             COLUMN_NAME_ID_STR => Ok(PointDataColumnType::Id),
             COLUMN_NAME_FRAME_ID_STR => Ok(PointDataColumnType::FrameId),
-            COLUMN_NAME_TIMESTAMP_SEC_STR => Ok(PointDataColumnType::TimestampSeconds),
-            COLUMN_NAME_TIMESTAMP_NANOSEC_STR => Ok(PointDataColumnType::TimestampNanoSeconds),
+            COLUMN_NAME_TIMESTAMP_SEC_STR => Ok(PointDataColumnType::TimestampSecond),
+            COLUMN_NAME_TIMESTAMP_NANOSEC_STR => Ok(PointDataColumnType::TimestampNanoSecond),
             COLUMN_NAME_INTENSITY_STR => Ok(PointDataColumnType::Intensity),
             COLUMN_NAME_SENSOR_TRANSLATION_X_STR => Ok(PointDataColumnType::SensorTranslationX),
             COLUMN_NAME_SENSOR_TRANSLATION_Y_STR => Ok(PointDataColumnType::SensorTranslationY),
@@ -117,6 +121,7 @@ impl std::str::FromStr for PointDataColumnType {
             COLUMN_NAME_SPHERICAL_AZIMUTH_STR => Ok(PointDataColumnType::SphericalAzimuth),
             COLUMN_NAME_SPHERICAL_ELEVATION_STR => Ok(PointDataColumnType::SphericalElevation),
             COLUMN_NAME_SPHERICAL_RANGE_STR => Ok(PointDataColumnType::SphericalRange),
+            COLUMN_NAME_POINT_SOURCE_ID_STR => Ok(PointDataColumnType::PointSourceId),
             _ => Err(()),
         }
     }
@@ -130,15 +135,15 @@ impl PointDataColumnType {
             PointDataColumnType::Z => COLUMN_NAME_Z_STR,
             PointDataColumnType::Id => COLUMN_NAME_ID_STR,
             PointDataColumnType::FrameId => COLUMN_NAME_FRAME_ID_STR,
-            PointDataColumnType::TimestampSeconds => COLUMN_NAME_TIMESTAMP_SEC_STR,
-            PointDataColumnType::TimestampNanoSeconds => COLUMN_NAME_TIMESTAMP_NANOSEC_STR,
+            PointDataColumnType::TimestampSecond => COLUMN_NAME_TIMESTAMP_SEC_STR,
+            PointDataColumnType::TimestampNanoSecond => COLUMN_NAME_TIMESTAMP_NANOSEC_STR,
             PointDataColumnType::Intensity => COLUMN_NAME_INTENSITY_STR,
             PointDataColumnType::SensorTranslationX => COLUMN_NAME_SENSOR_TRANSLATION_X_STR,
             PointDataColumnType::SensorTranslationY => COLUMN_NAME_SENSOR_TRANSLATION_Y_STR,
             PointDataColumnType::SensorTranslationZ => COLUMN_NAME_SENSOR_TRANSLATION_Z_STR,
-            PointDataColumnType::SensorRotationI => COLUMN_NAME_SENSOR_ROTATION_I_STR,
-            PointDataColumnType::SensorRotationJ => COLUMN_NAME_SENSOR_ROTATION_J_STR,
-            PointDataColumnType::SensorRotationK => COLUMN_NAME_SENSOR_ROTATION_K_STR,
+            PointDataColumnType::SensorRotationX => COLUMN_NAME_SENSOR_ROTATION_X_STR,
+            PointDataColumnType::SensorRotationY => COLUMN_NAME_SENSOR_ROTATION_Y_STR,
+            PointDataColumnType::SensorRotationZ => COLUMN_NAME_SENSOR_ROTATION_Z_STR,
             PointDataColumnType::SensorRotationW => COLUMN_NAME_SENSOR_ROTATION_W_STR,
             PointDataColumnType::ColorRed => COLUMN_NAME_COLOR_RED_STR,
             PointDataColumnType::ColorGreen => COLUMN_NAME_COLOR_GREEN_STR,
@@ -150,6 +155,7 @@ impl PointDataColumnType {
             PointDataColumnType::OctantIndexX => COLUMN_NAME_OCTANT_INDEX_X_STR,
             PointDataColumnType::OctantIndexY => COLUMN_NAME_OCTANT_INDEX_Y_STR,
             PointDataColumnType::OctantIndexZ => COLUMN_NAME_OCTANT_INDEX_Z_STR,
+            PointDataColumnType::PointSourceId => COLUMN_NAME_POINT_SOURCE_ID_STR,
         }
     }
 
@@ -159,16 +165,23 @@ impl PointDataColumnType {
             PointDataColumnType::Y => DataType::Float64,
             PointDataColumnType::Z => DataType::Float64,
             PointDataColumnType::Id => DataType::UInt64,
-            PointDataColumnType::FrameId => DataType::Categorical(None, Default::default()),
-            PointDataColumnType::TimestampSeconds => DataType::Int64,
-            PointDataColumnType::TimestampNanoSeconds => DataType::UInt32,
+            PointDataColumnType::FrameId => DataType::Categorical(
+                Categories::new(
+                    "frame_ids".into(),
+                    "ecoord_frames".into(),
+                    CategoricalPhysical::U8,
+                ),
+                Arc::new(CategoricalMapping::new(u8::MAX as usize)),
+            ),
+            PointDataColumnType::TimestampSecond => DataType::Int64,
+            PointDataColumnType::TimestampNanoSecond => DataType::UInt32,
             PointDataColumnType::Intensity => DataType::Float32,
             PointDataColumnType::SensorTranslationX => DataType::Float64,
             PointDataColumnType::SensorTranslationY => DataType::Float64,
             PointDataColumnType::SensorTranslationZ => DataType::Float64,
-            PointDataColumnType::SensorRotationI => DataType::Float64,
-            PointDataColumnType::SensorRotationJ => DataType::Float64,
-            PointDataColumnType::SensorRotationK => DataType::Float64,
+            PointDataColumnType::SensorRotationX => DataType::Float64,
+            PointDataColumnType::SensorRotationY => DataType::Float64,
+            PointDataColumnType::SensorRotationZ => DataType::Float64,
             PointDataColumnType::SensorRotationW => DataType::Float64,
             PointDataColumnType::ColorRed => DataType::UInt16,
             PointDataColumnType::ColorGreen => DataType::UInt16,
@@ -180,6 +193,7 @@ impl PointDataColumnType {
             PointDataColumnType::OctantIndexX => DataType::UInt64,
             PointDataColumnType::OctantIndexY => DataType::UInt64,
             PointDataColumnType::OctantIndexZ => DataType::UInt64,
+            PointDataColumnType::PointSourceId => DataType::UInt16,
         }
     }
 }
@@ -202,29 +216,6 @@ impl PointData {
             return Err(NoData("point_data"));
         }
 
-        let column_names = data_frame.get_column_names();
-        if column_names[0] != PointDataColumnType::X.as_str() {
-            return Err(ColumnNameMisMatch(
-                0,
-                PointDataColumnType::X.as_str(),
-                column_names[0].to_string(),
-            ));
-        }
-        if column_names[1] != PointDataColumnType::Y.as_str() {
-            return Err(ColumnNameMisMatch(
-                1,
-                PointDataColumnType::Y.as_str(),
-                column_names[1].to_string(),
-            ));
-        }
-        if column_names[2] != PointDataColumnType::Z.as_str() {
-            return Err(ColumnNameMisMatch(
-                2,
-                PointDataColumnType::Z.as_str(),
-                column_names[2].to_string(),
-            ));
-        }
-
         // check if column types are correct
         let data_frame_column_types: Vec<PointDataColumnType> = data_frame
             .get_column_names()
@@ -235,9 +226,13 @@ impl PointData {
         for current_column_type in data_frame_column_types {
             let current_column = data_frame
                 .column(current_column_type.as_str())
-                .expect("Column must exist");
+                .expect("column must exist");
             if current_column.dtype() != &current_column_type.data_frame_data_type() {
-                return Err(TypeMisMatch(current_column_type.as_str()));
+                return Err(TypeMismatch {
+                    column: current_column_type.as_str(),
+                    expected: current_column_type.data_frame_data_type().to_string(),
+                    actual: current_column.dtype().to_string(),
+                });
             }
         }
 
@@ -289,11 +284,11 @@ impl PointData {
         Ok(values)
     }
 
-    pub fn get_frame_id_values(&self) -> Result<&CategoricalChunked, Error> {
+    pub fn get_frame_id_values(&self) -> Result<&Categorical8Chunked, Error> {
         let values = self
             .data_frame
             .column(PointDataColumnType::FrameId.as_str())?
-            .categorical()
+            .cat8()
             .expect("type must be categorical");
         Ok(values)
     }
@@ -301,7 +296,7 @@ impl PointData {
     pub fn get_timestamp_sec_values(&self) -> Result<&Int64Chunked, Error> {
         let values = self
             .data_frame
-            .column(PointDataColumnType::TimestampSeconds.as_str())?
+            .column(PointDataColumnType::TimestampSecond.as_str())?
             .i64()
             .expect("type must be i64");
         Ok(values)
@@ -310,7 +305,7 @@ impl PointData {
     pub fn get_timestamp_nanosec_values(&self) -> Result<&UInt32Chunked, Error> {
         let values = self
             .data_frame
-            .column(PointDataColumnType::TimestampNanoSeconds.as_str())?
+            .column(PointDataColumnType::TimestampNanoSecond.as_str())?
             .u32()
             .expect("type must be u32");
         Ok(values)
@@ -352,28 +347,28 @@ impl PointData {
         Ok(values)
     }
 
-    pub fn get_sensor_rotation_i_values(&self) -> Result<&Float64Chunked, Error> {
+    pub fn get_sensor_rotation_x_values(&self) -> Result<&Float64Chunked, Error> {
         let values = self
             .data_frame
-            .column(PointDataColumnType::SensorRotationI.as_str())?
+            .column(PointDataColumnType::SensorRotationX.as_str())?
             .f64()
             .expect("type must be f64");
         Ok(values)
     }
 
-    pub fn get_sensor_rotation_j_values(&self) -> Result<&Float64Chunked, Error> {
+    pub fn get_sensor_rotation_y_values(&self) -> Result<&Float64Chunked, Error> {
         let values = self
             .data_frame
-            .column(PointDataColumnType::SensorRotationJ.as_str())?
+            .column(PointDataColumnType::SensorRotationY.as_str())?
             .f64()
             .expect("type must be f64");
         Ok(values)
     }
 
-    pub fn get_sensor_rotation_k_values(&self) -> Result<&Float64Chunked, Error> {
+    pub fn get_sensor_rotation_z_values(&self) -> Result<&Float64Chunked, Error> {
         let values = self
             .data_frame
-            .column(PointDataColumnType::SensorRotationK.as_str())?
+            .column(PointDataColumnType::SensorRotationZ.as_str())?
             .f64()
             .expect("type must be f64");
         Ok(values)
@@ -441,6 +436,15 @@ impl PointData {
             .expect("type must be f64");
         Ok(values)
     }
+
+    pub fn get_point_source_id_values(&self) -> Result<&UInt16Chunked, Error> {
+        let values = self
+            .data_frame
+            .column(PointDataColumnType::PointSourceId.as_str())?
+            .u16()
+            .expect("type must be f64");
+        Ok(values)
+    }
 }
 
 impl PointData {
@@ -458,13 +462,13 @@ impl PointData {
 
     pub fn contains_timestamp_sec_column(&self) -> bool {
         self.data_frame
-            .column(PointDataColumnType::TimestampSeconds.as_str())
+            .column(PointDataColumnType::TimestampSecond.as_str())
             .is_ok()
     }
 
     pub fn contains_timestamp_nanosec_column(&self) -> bool {
         self.data_frame
-            .column(PointDataColumnType::TimestampNanoSeconds.as_str())
+            .column(PointDataColumnType::TimestampNanoSecond.as_str())
             .is_ok()
     }
 
@@ -492,21 +496,21 @@ impl PointData {
             .is_ok()
     }
 
-    pub fn contains_sensor_rotation_i_column(&self) -> bool {
+    pub fn contains_sensor_rotation_x_column(&self) -> bool {
         self.data_frame
-            .column(PointDataColumnType::SensorRotationI.as_str())
+            .column(PointDataColumnType::SensorRotationX.as_str())
             .is_ok()
     }
 
-    pub fn contains_sensor_rotation_j_column(&self) -> bool {
+    pub fn contains_sensor_rotation_y_column(&self) -> bool {
         self.data_frame
-            .column(PointDataColumnType::SensorRotationJ.as_str())
+            .column(PointDataColumnType::SensorRotationY.as_str())
             .is_ok()
     }
 
-    pub fn contains_sensor_rotation_k_column(&self) -> bool {
+    pub fn contains_sensor_rotation_z_column(&self) -> bool {
         self.data_frame
-            .column(PointDataColumnType::SensorRotationK.as_str())
+            .column(PointDataColumnType::SensorRotationZ.as_str())
             .is_ok()
     }
 
@@ -552,6 +556,12 @@ impl PointData {
             .is_ok()
     }
 
+    pub fn contains_point_source_id_column(&self) -> bool {
+        self.data_frame
+            .column(PointDataColumnType::PointSourceId.as_str())
+            .is_ok()
+    }
+
     pub fn contains_octant_index_level_column(&self) -> bool {
         self.data_frame
             .column(PointDataColumnType::OctantIndexLevel.as_str())
@@ -589,9 +599,9 @@ impl PointData {
     }
 
     pub fn contains_sensor_rotation(&self) -> bool {
-        self.contains_sensor_rotation_i_column()
-            && self.contains_sensor_rotation_j_column()
-            && self.contains_sensor_rotation_k_column()
+        self.contains_sensor_rotation_x_column()
+            && self.contains_sensor_rotation_y_column()
+            && self.contains_sensor_rotation_z_column()
             && self.contains_sensor_rotation_w_column()
     }
 
@@ -682,9 +692,9 @@ impl PointData {
 
     /// Returns all sensor rotations as quaternions in the local coordinate frame.
     pub fn get_all_sensor_rotations(&self) -> Result<Vec<UnitQuaternion<f64>>, Error> {
-        let i_values = self.get_sensor_rotation_i_values()?;
-        let j_values = self.get_sensor_rotation_j_values()?;
-        let k_values = self.get_sensor_rotation_k_values()?;
+        let i_values = self.get_sensor_rotation_x_values()?;
+        let j_values = self.get_sensor_rotation_y_values()?;
+        let k_values = self.get_sensor_rotation_z_values()?;
         let w_values = self.get_sensor_rotation_w_values()?;
 
         let all_sensor_rotations: Vec<UnitQuaternion<f64>> = (0..self.data_frame.height())
@@ -777,7 +787,7 @@ impl PointData {
             .data_frame
             .column(PointDataColumnType::FrameId.as_str())?
             .unique()?
-            .categorical()
+            .cat8()
             .expect("type must be categorical")
             .cast(&DataType::String)
             .unwrap()
@@ -912,7 +922,7 @@ impl PointData {
 
         let values: Vec<u64> = Vec::from_iter(0u64..self.data_frame.height() as u64);
         if values.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch("should have the same height"));
+            return Err(ShapeMismatch("should have the same height"));
         }
 
         let new_series = Series::new(PointDataColumnType::Id.into(), values);
@@ -937,7 +947,7 @@ impl PointData {
     /// Add a new column to this DataFrame or replace an existing one.
     pub fn add_i64_column(&mut self, name: &str, values: Vec<i64>) -> Result<(), Error> {
         if values.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "values have a different length than point_data",
             ));
         }
@@ -947,10 +957,36 @@ impl PointData {
         Ok(())
     }
 
-    /// Add a new column to this DataFrame or replace an existing one.
+    /// Add a new u16 column to this DataFrame or replace an existing one.
+    pub fn add_u16_column(&mut self, name: &str, values: Vec<u16>) -> Result<(), Error> {
+        if values.len() != self.data_frame.height() {
+            return Err(ShapeMismatch(
+                "values have a different length than point_data",
+            ));
+        }
+
+        let new_series = Series::new(name.into(), values);
+        self.data_frame.with_column(new_series)?;
+        Ok(())
+    }
+
+    /// Add a new u32 column to this DataFrame or replace an existing one.
     pub fn add_u32_column(&mut self, name: &str, values: Vec<u32>) -> Result<(), Error> {
         if values.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
+                "values have a different length than point_data",
+            ));
+        }
+
+        let new_series = Series::new(name.into(), values);
+        self.data_frame.with_column(new_series)?;
+        Ok(())
+    }
+
+    /// Add a new u64 column to this DataFrame or replace an existing one.
+    pub fn add_u64_column(&mut self, name: &str, values: Vec<u64>) -> Result<(), Error> {
+        if values.len() != self.data_frame.height() {
+            return Err(ShapeMismatch(
                 "values have a different length than point_data",
             ));
         }
@@ -963,7 +999,7 @@ impl PointData {
     /// Add a new column to this DataFrame or replace an existing one.
     pub fn add_f32_column(&mut self, name: &str, values: Vec<f32>) -> Result<(), Error> {
         if values.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "values have a different length than point_data",
             ));
         }
@@ -973,10 +1009,10 @@ impl PointData {
         Ok(())
     }
 
-    /// Add a new column to this DataFrame or replace an existing one.
+    /// Add a new f64 column to this DataFrame or replace an existing one.
     pub fn add_f64_column(&mut self, name: &str, values: Vec<f64>) -> Result<(), Error> {
         if values.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "values have a different length than point_data",
             ));
         }
@@ -1003,7 +1039,7 @@ impl PointData {
 impl PointData {
     pub fn update_points_in_place(&mut self, points: Vec<Point3<f64>>) -> Result<(), Error> {
         if points.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch("points"));
+            return Err(ShapeMismatch("points"));
         }
 
         if self
@@ -1046,7 +1082,7 @@ impl PointData {
         sensor_translations: Vec<Point3<f64>>,
     ) -> Result<(), Error> {
         if sensor_translations.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "sensor_translations has a different size than the point_data",
             ));
         }
@@ -1093,21 +1129,21 @@ impl PointData {
         sensor_rotations: Vec<UnitQuaternion<f64>>,
     ) -> Result<(), Error> {
         if sensor_rotations.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "sensor_translations has a different size than the point_data",
             ));
         }
 
-        let sensor_rotation_i_series = Series::new(
-            PointDataColumnType::SensorRotationI.into(),
+        let sensor_rotation_x_series = Series::new(
+            PointDataColumnType::SensorRotationX.into(),
             sensor_rotations.iter().map(|r| r.i).collect::<Vec<f64>>(),
         );
-        let sensor_rotation_j_series = Series::new(
-            PointDataColumnType::SensorRotationJ.into(),
+        let sensor_rotation_y_series = Series::new(
+            PointDataColumnType::SensorRotationY.into(),
             sensor_rotations.iter().map(|r| r.j).collect::<Vec<f64>>(),
         );
-        let sensor_rotation_k_series = Series::new(
-            PointDataColumnType::SensorRotationK.into(),
+        let sensor_rotation_z_series = Series::new(
+            PointDataColumnType::SensorRotationZ.into(),
             sensor_rotations.iter().map(|r| r.k).collect::<Vec<f64>>(),
         );
         let sensor_rotation_w_series = Series::new(
@@ -1116,16 +1152,16 @@ impl PointData {
         );
 
         self.data_frame.replace(
-            PointDataColumnType::SensorRotationI.as_str(),
-            sensor_rotation_i_series,
+            PointDataColumnType::SensorRotationX.as_str(),
+            sensor_rotation_x_series,
         )?;
         self.data_frame.replace(
-            PointDataColumnType::SensorRotationJ.as_str(),
-            sensor_rotation_j_series,
+            PointDataColumnType::SensorRotationY.as_str(),
+            sensor_rotation_y_series,
         )?;
         self.data_frame.replace(
-            PointDataColumnType::SensorRotationK.as_str(),
-            sensor_rotation_k_series,
+            PointDataColumnType::SensorRotationZ.as_str(),
+            sensor_rotation_z_series,
         )?;
         self.data_frame.replace(
             PointDataColumnType::SensorRotationW.as_str(),
@@ -1140,7 +1176,7 @@ impl PointData {
         sensor_poses: Vec<Isometry3<f64>>,
     ) -> Result<(), Error> {
         if sensor_poses.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "sensor_poses has a different size than the point_data",
             ));
         }
@@ -1163,7 +1199,7 @@ impl PointData {
         spherical_points: Vec<SphericalPoint3<f64>>,
     ) -> Result<(), Error> {
         if spherical_points.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "spherical_points has a different size than the point_data",
             ));
         }
@@ -1192,7 +1228,7 @@ impl PointData {
 
     pub fn add_octant_indices(&mut self, octant_indices: Vec<OctantIndex>) -> Result<(), Error> {
         if octant_indices.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "octant_indices has a different size than the point_data",
             ));
         }
@@ -1234,7 +1270,7 @@ impl PointData {
             return Err(ColumnAlreadyExists(PointDataColumnType::FrameId.as_str()));
         };
         if frame_ids.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "frame_ids has a different size than the point_data",
             ));
         }
@@ -1246,7 +1282,7 @@ impl PointData {
                 .map(|x| x.to_string())
                 .collect::<Vec<String>>(),
         )
-        .cast(&DataType::Categorical(None, Default::default()))
+        .cast(&PointDataColumnType::FrameId.data_frame_data_type())
         .unwrap();
         self.data_frame.with_column(frame_id_series)?;
 
@@ -1269,7 +1305,7 @@ impl PointData {
         sensor_translations: Vec<Point3<f64>>,
     ) -> Result<(), Error> {
         if sensor_translations.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "sensor_translation has a different size than the point_data",
             ));
         }
@@ -1318,30 +1354,30 @@ impl PointData {
         sensor_rotations: Vec<UnitQuaternion<f64>>,
     ) -> Result<(), Error> {
         if sensor_rotations.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "sensor_rotations has a different size than the point_data",
             ));
         }
 
-        let sensor_rotation_i_series = Series::new(
-            PointDataColumnType::SensorRotationI.into(),
+        let sensor_rotation_x_series = Series::new(
+            PointDataColumnType::SensorRotationX.into(),
             sensor_rotations.iter().map(|r| r.i).collect::<Vec<f64>>(),
         );
-        let sensor_rotation_j_series = Series::new(
-            PointDataColumnType::SensorRotationJ.into(),
+        let sensor_rotation_y_series = Series::new(
+            PointDataColumnType::SensorRotationY.into(),
             sensor_rotations.iter().map(|r| r.j).collect::<Vec<f64>>(),
         );
-        let sensor_rotation_k_series = Series::new(
-            PointDataColumnType::SensorRotationK.into(),
+        let sensor_rotation_z_series = Series::new(
+            PointDataColumnType::SensorRotationZ.into(),
             sensor_rotations.iter().map(|r| r.k).collect::<Vec<f64>>(),
         );
         let sensor_rotation_w_series = Series::new(
             PointDataColumnType::SensorRotationW.into(),
             sensor_rotations.iter().map(|r| r.w).collect::<Vec<f64>>(),
         );
-        self.data_frame.with_column(sensor_rotation_i_series)?;
-        self.data_frame.with_column(sensor_rotation_j_series)?;
-        self.data_frame.with_column(sensor_rotation_k_series)?;
+        self.data_frame.with_column(sensor_rotation_x_series)?;
+        self.data_frame.with_column(sensor_rotation_y_series)?;
+        self.data_frame.with_column(sensor_rotation_z_series)?;
         self.data_frame.with_column(sensor_rotation_w_series)?;
 
         Ok(())
@@ -1356,7 +1392,7 @@ impl PointData {
 
     pub fn add_sensor_poses(&mut self, sensor_poses: Vec<Isometry3<f64>>) -> Result<(), Error> {
         if sensor_poses.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "sensor_rotations has a different size than the point_data",
             ));
         }
@@ -1383,7 +1419,7 @@ impl PointData {
 
     pub fn add_colors(&mut self, colors: Vec<palette::Srgb<u16>>) -> Result<(), Error> {
         if colors.len() != self.data_frame.height() {
-            return Err(ShapeMisMatch(
+            return Err(ShapeMismatch(
                 "colors has a different size than the point_data",
             ));
         }

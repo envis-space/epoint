@@ -12,7 +12,7 @@ pub fn filter_none_values_of_column_in_place(
         .clone()
         .lazy()
         .filter(col(column_name).is_not_null())
-        .select([all()])
+        .select([all().as_expr()])
         .collect()?;
 
     point_cloud.point_data.data_frame = filtered_point_data;

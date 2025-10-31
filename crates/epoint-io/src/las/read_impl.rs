@@ -2,9 +2,10 @@ use crate::Error;
 use crate::Error::InvalidVersion;
 use crate::las::LasVersion;
 use crate::las::read::LasReadInfo;
-use epoint_core::{PointCloud, PointDataColumnType};
+use epoint_core::{PointCloud, PointCloudInfo, PointDataColumnType};
 use las::Version;
 
+use ecoord::FrameId;
 use polars::prelude::DataFrame;
 use polars::prelude::*;
 use rayon::prelude::*;
@@ -14,6 +15,7 @@ use std::io::{BufReader, Seek};
 pub fn import_point_cloud_from_las_reader<R: std::io::Read + Seek + Send + 'static + Debug>(
     reader: R,
     normalize_colors: bool,
+    world_frame_id: FrameId,
 ) -> Result<(PointCloud, LasReadInfo), Error> {
     let mut las_reader = las::Reader::new(BufReader::new(reader))?;
     let mut las_points = Vec::new();
@@ -40,6 +42,38 @@ pub fn import_point_cloud_from_las_reader<R: std::io::Read + Seek + Send + 'stat
                 .collect::<Vec<f32>>(),
         ),
     ];
+
+    if las_points.iter().all(|p| p.gps_time.is_some()) {
+        let (seconds, nanos): (Vec<i64>, Vec<u32>) = las_points
+            .par_iter()
+            .map(|p| {
+                let time = p.gps_time.unwrap(); // Safe: checked above
+                let seconds = time.floor() as i64;
+                let nanos = ((time - time.floor()) * 1_000_000_000.0) as u32;
+                (seconds, nanos)
+            })
+            .unzip();
+
+        point_data_columns.push(Column::new(
+            PointDataColumnType::TimestampSecond.into(),
+            seconds,
+        ));
+        point_data_columns.push(Column::new(
+            PointDataColumnType::TimestampNanoSecond.into(),
+            nanos,
+        ));
+    }
+
+    if las_points.iter().any(|p| p.point_source_id != 0) {
+        point_data_columns.push(Column::new(
+            PointDataColumnType::PointSourceId.into(),
+            las_points
+                .par_iter()
+                .map(|p| p.point_source_id)
+                .collect::<Vec<u16>>(),
+        ));
+    }
+
     if las_points.par_iter().all(|p| p.color.is_some()) {
         // check if normalization needed
         let normalization_factor = if normalize_colors
@@ -80,8 +114,8 @@ pub fn import_point_cloud_from_las_reader<R: std::io::Read + Seek + Send + 'stat
     }
 
     let point_data = DataFrame::new(point_data_columns)?;
-    let point_cloud =
-        PointCloud::from_data_frame(point_data, Default::default(), Default::default())?;
+    let info = PointCloudInfo::new(Some(world_frame_id));
+    let point_cloud = PointCloud::from_data_frame(point_data, info, Default::default())?;
 
     let version = get_version(&las_reader)?;
     let las_read_info = LasReadInfo { version };

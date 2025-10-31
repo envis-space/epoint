@@ -11,10 +11,14 @@ pub enum Error {
     #[error("No data: {0}")]
     NoData(&'static str),
     #[error("Lengths don't match: {0}")]
-    ShapeMisMatch(&'static str),
+    ShapeMismatch(&'static str),
 
-    #[error("Field {0} does not match type")]
-    TypeMisMatch(&'static str),
+    #[error("Column `{column}` expects type `{expected}`, but received `{actual}`")]
+    TypeMismatch {
+        column: &'static str,
+        expected: String,
+        actual: String,
+    },
     #[error("At column index `{0}` the column name `{1}` is expected, but received `{2}`")]
     ColumnNameMisMatch(usize, &'static str, String),
     #[error("unknown data store error")]

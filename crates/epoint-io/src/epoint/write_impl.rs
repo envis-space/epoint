@@ -48,7 +48,7 @@ pub fn write_epoint_format<W: Write>(
     // ecoord document
     let mut ecoord_document_buffer: Vec<u8> = Vec::new();
     ecoord::io::EcoordWriter::new(&mut ecoord_document_buffer)
-        .with_pretty_write(compression_level.is_none())
+        .with_pretty(compression_level.is_none())
         .finish(point_cloud.reference_frames())?;
     if let Some(compression_level) = compression_level {
         let mut ecoord_document_compressed_buffer: Vec<u8> = Vec::new();

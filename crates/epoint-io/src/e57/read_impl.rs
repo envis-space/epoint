@@ -140,11 +140,11 @@ pub fn import_individual_point_cloud_from_e57_file<T: Read + Seek>(
         Column::new(PointDataColumnType::Y.into(), y_values),
         Column::new(PointDataColumnType::Z.into(), z_values),
         Column::new(
-            PointDataColumnType::TimestampSeconds.into(),
+            PointDataColumnType::TimestampSecond.into(),
             vec![acquisition_start_timestamp.timestamp(); number_of_points],
         ),
         Column::new(
-            PointDataColumnType::TimestampNanoSeconds.into(),
+            PointDataColumnType::TimestampNanoSecond.into(),
             vec![acquisition_start_timestamp.nanosecond(); number_of_points],
         ),
         // TODO: only create XYZIJKW columns if really needed
@@ -161,15 +161,15 @@ pub fn import_individual_point_cloud_from_e57_file<T: Read + Seek>(
             vec![0.0f64; number_of_points],
         ),
         Column::new(
-            PointDataColumnType::SensorRotationI.into(),
+            PointDataColumnType::SensorRotationX.into(),
             vec![0.0f64; number_of_points],
         ),
         Column::new(
-            PointDataColumnType::SensorRotationJ.into(),
+            PointDataColumnType::SensorRotationY.into(),
             vec![0.0f64; number_of_points],
         ),
         Column::new(
-            PointDataColumnType::SensorRotationK.into(),
+            PointDataColumnType::SensorRotationZ.into(),
             vec![0.0f64; number_of_points],
         ),
         Column::new(
