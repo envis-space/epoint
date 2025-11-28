@@ -1,28 +1,18 @@
 use crate::e57::error::Error;
-use crate::e57::error::Error::{
-    NoAcquisitionTimeSpecified, NoPointCloudsInFile, NotMatchingNumberOfAcquisitionTimes,
-    NotSupported,
-};
-use chrono::{Timelike, Utc};
+use crate::e57::error::Error::{NoPointCloudsInFile, NotSupported};
 use e57::{CartesianCoordinate, PointCloudReaderSimple};
-use ecoord::{
-    ChannelId, ExtrapolationMethod, FrameId, InterpolationMethod, ReferenceFrames, Transform,
-    TransformId, TransformInfo,
-};
+use ecoord::{FrameId, StaticTransform, Transform, TransformEdge, TransformTree};
 use epoint_core::{PointCloud, PointCloudInfo, PointDataColumnType};
 use epoint_transform::merge;
 use nalgebra::{Quaternion, UnitQuaternion, Vector3};
 use polars::frame::DataFrame;
 use polars::prelude::{Column, NamedFrom};
-use std::collections::HashMap;
 use std::io::{BufReader, Read, Seek};
 
 pub fn import_point_cloud_from_e57_file<R: Read + Seek>(
     reader: R,
-    acquisition_start_timestamps: Option<Vec<chrono::DateTime<Utc>>>,
-    channel_id: ChannelId,
-    world_frame_id: FrameId,
-    scanner_frame_id: FrameId,
+    reference_frame_id: FrameId,
+    sensor_frame_id: FrameId,
 ) -> Result<PointCloud, Error> {
     let mut e57_reader = e57::E57Reader::new(BufReader::new(reader))?;
     if e57_reader.pointclouds().is_empty() {
@@ -33,21 +23,11 @@ pub fn import_point_cloud_from_e57_file<R: Read + Seek>(
             "reading e57 file with multiple point clouds is not supported",
         ));
     }
-    if let Some(acquisition_start_timestamps) = &acquisition_start_timestamps
-        && acquisition_start_timestamps.len() != e57_reader.pointclouds().len()
-    {
-        return Err(NotMatchingNumberOfAcquisitionTimes {
-            set_acquisition_times: acquisition_start_timestamps.len(),
-            point_clouds: e57_reader.pointclouds().len(),
-        });
-    }
 
     let mut point_clouds: Vec<PointCloud> = Vec::new();
     for (current_index, current_e57_point_cloud) in e57_reader.pointclouds().into_iter().enumerate()
     {
-        let mut e57_point_cloud_reader = e57_reader
-            .pointcloud_simple(&current_e57_point_cloud)
-            .unwrap();
+        let mut e57_point_cloud_reader = e57_reader.pointcloud_simple(&current_e57_point_cloud)?;
         e57_point_cloud_reader.apply_pose(false);
 
         if current_e57_point_cloud.acquisition_start.is_some()
@@ -57,18 +37,12 @@ pub fn import_point_cloud_from_e57_file<R: Read + Seek>(
                 "times acquisition_start and acquisition_end are not yet supported",
             ));
         }
-        let current_acquisition_start_timestamp = acquisition_start_timestamps
-            .as_ref()
-            .map(|x| x[current_index]);
 
         let point_cloud = import_individual_point_cloud_from_e57_file(
             e57_point_cloud_reader,
             &current_e57_point_cloud.transform,
-            &channel_id,
-            &world_frame_id,
-            &scanner_frame_id,
-            current_acquisition_start_timestamp,
-            None,
+            &reference_frame_id,
+            &sensor_frame_id,
             current_e57_point_cloud.has_timestamp(),
             current_e57_point_cloud.has_intensity(),
             current_e57_point_cloud.has_color(),
@@ -84,17 +58,12 @@ pub fn import_point_cloud_from_e57_file<R: Read + Seek>(
 pub fn import_individual_point_cloud_from_e57_file<T: Read + Seek>(
     e57_point_cloud_reader: PointCloudReaderSimple<T>,
     transform: &Option<e57::Transform>,
-    channel_id: &ChannelId,
-    world_frame_id: &FrameId,
-    scanner_frame_id: &FrameId,
-    acquisition_start_timestamp: Option<chrono::DateTime<Utc>>,
-    acquisition_end_timestamp: Option<chrono::DateTime<Utc>>,
+    reference_frame_id: &FrameId,
+    sensor_frame_id: &FrameId,
     has_timestamp_column: bool,
     has_intensity_column: bool,
     has_color_columns: bool,
 ) -> Result<PointCloud, Error> {
-    let acquisition_start_timestamp =
-        acquisition_start_timestamp.ok_or(NoAcquisitionTimeSpecified())?;
     if has_timestamp_column {
         return Err(NotSupported("timestamp column is not supported"));
     }
@@ -133,49 +102,11 @@ pub fn import_individual_point_cloud_from_e57_file<T: Read + Seek>(
             color_blue_values.push((color.blue * u16::MAX as f32) as u16);
         }
     }
-    let number_of_points = x_values.len();
 
     let mut point_data_columns = vec![
         Column::new(PointDataColumnType::X.into(), x_values),
         Column::new(PointDataColumnType::Y.into(), y_values),
         Column::new(PointDataColumnType::Z.into(), z_values),
-        Column::new(
-            PointDataColumnType::TimestampSecond.into(),
-            vec![acquisition_start_timestamp.timestamp(); number_of_points],
-        ),
-        Column::new(
-            PointDataColumnType::TimestampNanoSecond.into(),
-            vec![acquisition_start_timestamp.nanosecond(); number_of_points],
-        ),
-        // TODO: only create XYZIJKW columns if really needed
-        Column::new(
-            PointDataColumnType::SensorTranslationX.into(),
-            vec![0.0f64; number_of_points],
-        ),
-        Column::new(
-            PointDataColumnType::SensorTranslationY.into(),
-            vec![0.0f64; number_of_points],
-        ),
-        Column::new(
-            PointDataColumnType::SensorTranslationZ.into(),
-            vec![0.0f64; number_of_points],
-        ),
-        Column::new(
-            PointDataColumnType::SensorRotationX.into(),
-            vec![0.0f64; number_of_points],
-        ),
-        Column::new(
-            PointDataColumnType::SensorRotationY.into(),
-            vec![0.0f64; number_of_points],
-        ),
-        Column::new(
-            PointDataColumnType::SensorRotationZ.into(),
-            vec![0.0f64; number_of_points],
-        ),
-        Column::new(
-            PointDataColumnType::SensorRotationW.into(),
-            vec![1.0f64; number_of_points],
-        ),
     ];
 
     if has_intensity_column {
@@ -200,47 +131,34 @@ pub fn import_individual_point_cloud_from_e57_file<T: Read + Seek>(
     }
 
     let point_data = DataFrame::new(point_data_columns).expect("should work");
-    let reference_frames = parse_reference_frame(
-        acquisition_start_timestamp,
-        transform,
-        channel_id,
-        world_frame_id,
-        scanner_frame_id,
-    );
-    let point_cloud_info = PointCloudInfo::new(Some(scanner_frame_id.clone()));
+    let transform_tree = parse_transform_tree(transform, reference_frame_id, sensor_frame_id);
+    let point_cloud_info = PointCloudInfo::new(Some(sensor_frame_id.clone()));
 
-    let point_cloud = PointCloud::from_data_frame(point_data, point_cloud_info, reference_frames)?;
+    let point_cloud = PointCloud::from_data_frame(point_data, point_cloud_info, transform_tree)?;
 
     Ok(point_cloud)
 }
 
 // see also: http://www.libe57.org/bestCoordinates.html
-fn parse_reference_frame(
-    timestamp: chrono::DateTime<Utc>,
+fn parse_transform_tree(
     transform: &Option<e57::Transform>,
-    channel_id: &ChannelId,
-    world_frame_id: &FrameId,
-    scanner_frame_id: &FrameId,
-) -> ReferenceFrames {
+    reference_frame_id: &FrameId,
+    sensor_frame_id: &FrameId,
+) -> TransformTree {
     let Some(transform) = transform else {
-        return ReferenceFrames::default();
+        return TransformTree::default();
     };
 
-    let transform_id = TransformId::new(world_frame_id.clone(), scanner_frame_id.clone());
-
-    let translation = convert_translation(&transform.translation);
+    let translation: Vector3<f64> = convert_translation(&transform.translation);
     let rotation = convert_rotation(&transform.rotation);
-    let transform = Transform::new(timestamp, translation, rotation);
-    let mut transforms: HashMap<(ChannelId, TransformId), Vec<Transform>> = HashMap::new();
-    transforms.insert((channel_id.clone(), transform_id.clone()), vec![transform]);
 
-    let mut transform_info: HashMap<TransformId, TransformInfo> = HashMap::new();
-    transform_info.insert(
-        transform_id,
-        TransformInfo::new(InterpolationMethod::Step, ExtrapolationMethod::Constant),
+    let static_transform = StaticTransform::new(
+        reference_frame_id.clone(),
+        sensor_frame_id.clone(),
+        Transform::new(translation, rotation),
     );
 
-    ReferenceFrames::new(transforms, HashMap::new(), HashMap::new(), transform_info)
+    TransformTree::new(vec![TransformEdge::Static(static_transform)], Vec::new())
         .expect("should work")
 }
 
@@ -251,6 +169,3 @@ fn convert_translation(value: &e57::Translation) -> Vector3<f64> {
 fn convert_rotation(value: &e57::Quaternion) -> UnitQuaternion<f64> {
     UnitQuaternion::new_unchecked(Quaternion::new(value.w, value.x, value.y, value.z))
 }
-
-//pub fn convert_date_time(date_time: e57::DateTime) -> chrono::DateTime<Utc> {
-//}

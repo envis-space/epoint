@@ -3,7 +3,7 @@ use crate::{PointCloudInfo, PointDataColumnType, PointDataColumns};
 use chrono::{DateTime, Utc};
 use std::collections::{HashMap, HashSet};
 
-use ecoord::{FrameId, ReferenceFrames, TransformId};
+use ecoord::{FrameId, TransformId, TransformTree};
 use nalgebra;
 use nalgebra::Point3;
 
@@ -16,18 +16,18 @@ use crate::point_data::PointData;
 use polars::prelude::*;
 use rayon::prelude::*;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct PointCloud {
     pub point_data: PointData,
     pub info: PointCloudInfo,
-    pub reference_frames: ReferenceFrames,
+    pub transform_tree: TransformTree,
 }
 
 impl PointCloud {
     pub fn new(
         point_data: PointDataColumns,
         info: PointCloudInfo,
-        reference_frames: ReferenceFrames,
+        transform_tree: TransformTree,
     ) -> Result<Self, Error> {
         let point_data = point_data.get_as_data_frame();
         if point_data
@@ -41,14 +41,14 @@ impl PointCloud {
         Ok(Self {
             point_data: PointData::new(point_data)?,
             info,
-            reference_frames,
+            transform_tree,
         })
     }
 
     pub fn from_data_frame(
         point_data: DataFrame,
         info: PointCloudInfo,
-        reference_frames: ReferenceFrames,
+        transform_tree: TransformTree,
     ) -> Result<Self, Error> {
         if point_data
             .column(PointDataColumnType::FrameId.as_str())
@@ -61,7 +61,7 @@ impl PointCloud {
         Ok(Self {
             point_data: PointData::new(point_data)?,
             info,
-            reference_frames,
+            transform_tree,
         })
     }
 }
@@ -75,8 +75,8 @@ impl PointCloud {
         &self.info
     }
 
-    pub fn reference_frames(&self) -> &ReferenceFrames {
-        &self.reference_frames
+    pub fn transform_tree(&self) -> &TransformTree {
+        &self.transform_tree
     }
 
     pub fn size(&self) -> usize {
@@ -125,8 +125,8 @@ impl PointCloud {
         self.point_data.contains_colors()
     }
 
-    pub fn set_reference_frames(&mut self, reference_frames: ReferenceFrames) {
-        self.reference_frames = reference_frames;
+    pub fn set_transform_tree(&mut self, transform_tree: TransformTree) {
+        self.transform_tree = transform_tree;
     }
 
     pub fn set_info_frame_id(&mut self, frame_id: Option<FrameId>) {
@@ -179,7 +179,7 @@ impl PointCloud {
         let filtered_point_cloud = PointCloud::from_data_frame(
             point_data,
             self.info.clone(),
-            self.reference_frames.clone(),
+            self.transform_tree.clone(),
         )?;
         Ok(filtered_point_cloud)
     }
@@ -208,7 +208,7 @@ impl PointCloud {
         let filtered_point_cloud = PointCloud::from_data_frame(
             point_data,
             self.info.clone(),
-            self.reference_frames.clone(),
+            self.transform_tree.clone(),
         )?;
         Ok(filtered_point_cloud)
     }
@@ -219,7 +219,7 @@ impl PointCloud {
         let filtered_point_cloud = PointCloud::from_data_frame(
             filtered_point_data.data_frame,
             self.info.clone(),
-            self.reference_frames.clone(),
+            self.transform_tree.clone(),
         )?;
         Ok(filtered_point_cloud)
     }
@@ -233,7 +233,7 @@ impl PointCloud {
         let filtered_point_cloud = PointCloud::from_data_frame(
             filtered_point_data.data_frame,
             self.info.clone(),
-            self.reference_frames.clone(),
+            self.transform_tree.clone(),
         )?;
         Ok(filtered_point_cloud)
     }
@@ -249,7 +249,7 @@ impl PointCloud {
             let filtered_point_cloud = PointCloud::from_data_frame(
                 filtered_point_data.data_frame,
                 self.info.clone(),
-                self.reference_frames.clone(),
+                self.transform_tree.clone(),
             )?;
             Some(filtered_point_cloud)
         } else {
@@ -272,7 +272,7 @@ impl PointCloud {
             let filtered_point_cloud = PointCloud::from_data_frame(
                 filtered_point_data.data_frame,
                 self.info.clone(),
-                self.reference_frames.clone(),
+                self.transform_tree.clone(),
             )?;
             Some(filtered_point_cloud)
         } else {
@@ -289,7 +289,7 @@ impl PointCloud {
             let filtered_point_cloud = PointCloud::from_data_frame(
                 filtered_point_data.data_frame,
                 self.info.clone(),
-                self.reference_frames.clone(),
+                self.transform_tree.clone(),
             )?;
             Some(filtered_point_cloud)
         } else {
@@ -306,7 +306,7 @@ impl PointCloud {
             let filtered_point_cloud = PointCloud::from_data_frame(
                 filtered_point_data.data_frame,
                 self.info.clone(),
-                self.reference_frames.clone(),
+                self.transform_tree.clone(),
             )?;
             Some(filtered_point_cloud)
         } else {
@@ -323,7 +323,7 @@ impl PointCloud {
             let filtered_point_cloud = PointCloud::from_data_frame(
                 filtered_point_data.data_frame,
                 self.info.clone(),
-                self.reference_frames.clone(),
+                self.transform_tree.clone(),
             )?;
             Some(filtered_point_cloud)
         } else {
@@ -340,7 +340,7 @@ impl PointCloud {
             let filtered_point_cloud = PointCloud::from_data_frame(
                 filtered_point_data.data_frame,
                 self.info.clone(),
-                self.reference_frames.clone(),
+                self.transform_tree.clone(),
             )?;
             Some(filtered_point_cloud)
         } else {
@@ -357,7 +357,7 @@ impl PointCloud {
             let filtered_point_cloud = PointCloud::from_data_frame(
                 filtered_point_data.data_frame,
                 self.info.clone(),
-                self.reference_frames.clone(),
+                self.transform_tree.clone(),
             )?;
             Some(filtered_point_cloud)
         } else {
@@ -374,7 +374,7 @@ impl PointCloud {
             let filtered_point_cloud = PointCloud::from_data_frame(
                 filtered_point_data.data_frame,
                 self.info.clone(),
-                self.reference_frames.clone(),
+                self.transform_tree.clone(),
             )?;
             Some(filtered_point_cloud)
         } else {
@@ -396,7 +396,7 @@ impl PointCloud {
             let filtered_point_cloud = PointCloud::from_data_frame(
                 filtered_point_data.data_frame,
                 self.info.clone(),
-                self.reference_frames.clone(),
+                self.transform_tree.clone(),
             )?;
             Some(filtered_point_cloud)
         } else {
@@ -418,7 +418,7 @@ impl PointCloud {
             let filtered_point_cloud = PointCloud::from_data_frame(
                 filtered_point_data.data_frame,
                 self.info.clone(),
-                self.reference_frames.clone(),
+                self.transform_tree.clone(),
             )?;
             Some(filtered_point_cloud)
         } else {
@@ -430,13 +430,12 @@ impl PointCloud {
 }
 
 impl PointCloud {
-    pub fn append_reference_frames(
+    pub fn append_transform_tree(
         &mut self,
-        reference_frames: ReferenceFrames,
+        transform_tree: TransformTree,
     ) -> Result<(), ecoord::Error> {
-        let merged_reference_frames =
-            ecoord::merge(&[self.reference_frames.clone(), reference_frames])?;
-        self.set_reference_frames(merged_reference_frames);
+        let merged_transform_tree = ecoord::merge(&[self.transform_tree.clone(), transform_tree])?;
+        self.set_transform_tree(merged_transform_tree);
         Ok(())
     }
 
@@ -449,6 +448,11 @@ impl PointCloud {
     pub fn resolve_to_frame(&mut self, target_frame_id: FrameId) -> Result<(), Error> {
         if self.info.frame_id.is_none() && !self.point_data.contains_frame_id_column() {
             return Err(NoFrameIdDefinitions);
+        }
+        if self.info.frame_id.as_ref() == Some(&target_frame_id)
+            && !self.point_data.contains_frame_id_column()
+        {
+            return Ok(());
         }
 
         let mut partition_columns: Vec<&str> = Vec::new();
@@ -496,7 +500,7 @@ impl PointCloud {
             .map(|((current_frame_id, current_timestamp), df)| {
                 let mut point_data = PointData::new_unchecked(df.clone());
                 let r = point_data.resolve_data_frame(
-                    &self.reference_frames,
+                    &self.transform_tree,
                     current_timestamp,
                     current_frame_id,
                     &target_frame_id,
@@ -507,7 +511,7 @@ impl PointCloud {
                     );
                     println!(
                         "all available frame ids: {:?}",
-                        &self.reference_frames.get_frame_ids()
+                        &self.transform_tree.get_frame_ids()
                     );
                     panic!("error");
                 }
@@ -580,11 +584,11 @@ impl PointCloud {
         let isometry_map: HashMap<_, _> = unique_timestamps
             .into_par_iter()
             .map(|current_timestamp| {
-                let isometry_graph = self
-                    .reference_frames
-                    .derive_transform_graph(&None, &Some(*current_timestamp))?;
-                let isometry = isometry_graph.get_isometry(&transform_id)?;
-                Ok((current_timestamp, isometry))
+                let transform = self
+                    .transform_tree
+                    .get_transform_at_time(&transform_id, *current_timestamp)?;
+
+                Ok((current_timestamp, transform.isometry()))
             })
             .collect::<Result<HashMap<_, _>, Error>>()?;
 

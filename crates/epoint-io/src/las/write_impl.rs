@@ -60,6 +60,8 @@ pub fn write_las_format<W: 'static + std::io::Write + Seek + Debug + Send>(
 
     let converted_intensity_values = point_cloud.point_data.get_intensity_values().ok();
 
+    let converted_point_source_id_values = point_cloud.point_data.get_point_source_id_values().ok();
+
     let converted_points: Vec<las::Point> = point_cloud
         .point_data
         .get_all_points()
@@ -71,9 +73,12 @@ pub fn write_las_format<W: 'static + std::io::Write + Seek + Debug + Send>(
             z: p.z,
             gps_time: converted_timestamps
                 .as_ref()
-                .and_then(|v| v.get(i).cloned()),
-            intensity: converted_intensity_values.map_or(0, |v| v.get(i).unwrap() as u16),
-            color: converted_colors.as_ref().and_then(|v| v.get(i).cloned()),
+                .and_then(|v| v.get(i).copied()),
+            intensity: converted_intensity_values
+                .map_or(0, |v| v.get(i).expect("must be available") as u16),
+            color: converted_colors.as_ref().and_then(|v| v.get(i).copied()),
+            point_source_id: converted_point_source_id_values
+                .map_or(0, |v| v.get(i).expect("must be available")),
             ..Default::default()
         })
         .collect();

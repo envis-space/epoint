@@ -1,4 +1,4 @@
-use ecoord::ReferenceFrames;
+use ecoord::TransformTree;
 use epoint_core::{PointCloud, PointCloudInfo, PointDataColumnType};
 use polars::datatypes::{DataType, PlHashSet};
 
@@ -17,11 +17,11 @@ pub fn merge(point_clouds: Vec<PointCloud>) -> Result<PointCloud, Error> {
     }
     let point_cloud_info = point_clouds.first().expect("must contain").info().clone();
 
-    let reference_frames: Vec<ReferenceFrames> = point_clouds
+    let transform_tree: Vec<TransformTree> = point_clouds
         .iter()
-        .map(|p| p.reference_frames().clone())
+        .map(|p| p.transform_tree().clone())
         .collect();
-    let merged_reference_frames = ecoord::merge(&reference_frames)?;
+    let merged_transform_tree = ecoord::merge(&transform_tree)?;
 
     let data_frame: Vec<LazyFrame> = point_clouds
         .iter()
@@ -57,6 +57,6 @@ pub fn merge(point_clouds: Vec<PointCloud>) -> Result<PointCloud, Error> {
     }
 
     let merged_point_cloud =
-        PointCloud::from_data_frame(merged_data_frame, point_cloud_info, merged_reference_frames)?;
+        PointCloud::from_data_frame(merged_data_frame, point_cloud_info, merged_transform_tree)?;
     Ok(merged_point_cloud)
 }

@@ -3,9 +3,10 @@ use crate::Error::InvalidVersion;
 use crate::las::LasVersion;
 use crate::las::read::LasReadInfo;
 use epoint_core::{PointCloud, PointCloudInfo, PointDataColumnType};
-use las::Version;
+use las::{Read, Version};
 
 use ecoord::FrameId;
+use epoint_core::Error::NoRemainingPoints;
 use polars::prelude::DataFrame;
 use polars::prelude::*;
 use rayon::prelude::*;
@@ -15,11 +16,64 @@ use std::io::{BufReader, Seek};
 pub fn import_point_cloud_from_las_reader<R: std::io::Read + Seek + Send + 'static + Debug>(
     reader: R,
     normalize_colors: bool,
-    world_frame_id: FrameId,
+    reference_frame_id: FrameId,
+    points_per_chunk: Option<u64>,
 ) -> Result<(PointCloud, LasReadInfo), Error> {
     let mut las_reader = las::Reader::new(BufReader::new(reader))?;
-    let mut las_points = Vec::new();
-    let point_count = las_reader.read_all_points_into(&mut las_points)?;
+
+    let mut point_data_data_frames: Vec<LazyFrame> = Vec::new();
+
+    let point_data = if let Some(points_per_chunk) = points_per_chunk {
+        loop {
+            let las_points = las_reader.read_points(points_per_chunk)?;
+            if las_points.is_empty() {
+                break;
+            }
+
+            let current_data_frame = convert_to_data_frame(las_points, normalize_colors)?.lazy();
+            point_data_data_frames.push(current_data_frame);
+        }
+        concat(point_data_data_frames, Default::default())?.collect()?
+    } else {
+        let mut las_points: Vec<las::Point> = Vec::new();
+        las_reader.read_all_points_into(&mut las_points)?;
+
+        convert_to_data_frame(las_points, normalize_colors)?
+    };
+
+    let info = PointCloudInfo::new(Some(reference_frame_id));
+    let point_cloud = PointCloud::from_data_frame(point_data, info, Default::default())?;
+
+    let version = get_version(&las_reader)?;
+    let las_read_info = LasReadInfo { version };
+
+    Ok((point_cloud, las_read_info))
+}
+
+fn get_version(las_reader: &las::Reader) -> Result<LasVersion, Error> {
+    //let mut las_reader = las::Reader::new(self.reader.clone())?;
+    let version = las_reader.header().version();
+
+    match version {
+        Version { major: 1, minor: 0 } => Ok(LasVersion::V1_0),
+        Version { major: 1, minor: 1 } => Ok(LasVersion::V1_1),
+        Version { major: 1, minor: 2 } => Ok(LasVersion::V1_2),
+        Version { major: 1, minor: 3 } => Ok(LasVersion::V1_3),
+        Version { major: 1, minor: 4 } => Ok(LasVersion::V1_4),
+        _ => Err(InvalidVersion {
+            major: version.major,
+            minor: version.minor,
+        }),
+    }
+}
+
+fn convert_to_data_frame(
+    las_points: Vec<las::Point>,
+    normalize_colors: bool,
+) -> Result<DataFrame, Error> {
+    if las_points.is_empty() {
+        return Err(NoRemainingPoints.into());
+    }
 
     let mut point_data_columns = vec![
         Column::new(
@@ -74,10 +128,10 @@ pub fn import_point_cloud_from_las_reader<R: std::io::Read + Seek + Send + 'stat
         ));
     }
 
-    if las_points.par_iter().all(|p| p.color.is_some()) {
+    if las_points.iter().all(|p| p.color.is_some()) {
         // check if normalization needed
         let normalization_factor = if normalize_colors
-            && las_points.par_iter().map(|p| p.color.unwrap()).all(|c| {
+            && las_points.iter().map(|p| p.color.unwrap()).all(|c| {
                 c.red <= u8::MAX as u16 && c.green <= u8::MAX as u16 && c.blue <= u8::MAX as u16
             }) {
             256
@@ -113,29 +167,8 @@ pub fn import_point_cloud_from_las_reader<R: std::io::Read + Seek + Send + 'stat
         point_data_columns.push(color_blue_column);
     }
 
-    let point_data = DataFrame::new(point_data_columns)?;
-    let info = PointCloudInfo::new(Some(world_frame_id));
-    let point_cloud = PointCloud::from_data_frame(point_data, info, Default::default())?;
-
-    let version = get_version(&las_reader)?;
-    let las_read_info = LasReadInfo { version };
-
-    Ok((point_cloud, las_read_info))
-}
-
-fn get_version(las_reader: &las::Reader) -> Result<LasVersion, Error> {
-    //let mut las_reader = las::Reader::new(self.reader.clone())?;
-    let version = las_reader.header().version();
-
-    match version {
-        Version { major: 1, minor: 0 } => Ok(LasVersion::V1_0),
-        Version { major: 1, minor: 1 } => Ok(LasVersion::V1_1),
-        Version { major: 1, minor: 2 } => Ok(LasVersion::V1_2),
-        Version { major: 1, minor: 3 } => Ok(LasVersion::V1_3),
-        Version { major: 1, minor: 4 } => Ok(LasVersion::V1_4),
-        _ => Err(InvalidVersion {
-            major: version.major,
-            minor: version.minor,
-        }),
-    }
+    let data_frame = DataFrame::new(point_data_columns)?;
+    // println!("Created data frame with {} rows", data_frame.height());
+    // println!("Data frame schema: {:?}", data_frame.schema());
+    Ok(data_frame)
 }

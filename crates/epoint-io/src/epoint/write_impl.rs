@@ -47,28 +47,25 @@ pub fn write_epoint_format<W: Write>(
 
     // ecoord document
     let mut ecoord_document_buffer: Vec<u8> = Vec::new();
-    ecoord::io::EcoordWriter::new(&mut ecoord_document_buffer)
-        .with_pretty(compression_level.is_none())
-        .finish(point_cloud.reference_frames())?;
-    if let Some(compression_level) = compression_level {
-        let mut ecoord_document_compressed_buffer: Vec<u8> = Vec::new();
-        zstd::stream::copy_encode(
-            Cursor::new(ecoord_document_buffer),
-            &mut ecoord_document_compressed_buffer,
-            compression_level,
-        )?;
-        archive_builder.append_data(
-            &mut create_archive_header(ecoord_document_compressed_buffer.len(), time),
-            FILE_NAME_ECOORD_COMPRESSED,
-            Cursor::new(ecoord_document_compressed_buffer),
-        )?;
+    let ecoord_document_compression = if let Some(compression_level) = compression_level {
+        ecoord::io::Compression::Zstd(compression_level)
     } else {
-        archive_builder.append_data(
-            &mut create_archive_header(ecoord_document_buffer.len(), time),
-            FILE_NAME_ECOORD_UNCOMPRESSED,
-            Cursor::new(ecoord_document_buffer),
-        )?;
-    }
+        ecoord::io::Compression::None
+    };
+    ecoord::io::EcoordWriter::new(&mut ecoord_document_buffer)
+        .with_compression(ecoord_document_compression)
+        .with_pretty(compression_level.is_none())
+        .finish(point_cloud.transform_tree())?;
+    let ecoord_document_file_name = if compression_level.is_some() {
+        FILE_NAME_ECOORD_COMPRESSED
+    } else {
+        FILE_NAME_ECOORD_UNCOMPRESSED
+    };
+    archive_builder.append_data(
+        &mut create_archive_header(ecoord_document_buffer.len(), time),
+        ecoord_document_file_name,
+        Cursor::new(ecoord_document_buffer),
+    )?;
 
     // point data
     let mut point_data_buffer: Vec<u8> = Vec::new();

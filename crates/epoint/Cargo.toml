@@ -9,6 +9,6 @@ description = "Library for processing 3D point clouds."
 
 
 [dependencies]
-epoint-core = { version = "0.0.1-alpha.9", path = "../epoint-core" }
-epoint-transform = { version = "0.0.1-alpha.9", path = "../epoint-transform" }
-epoint-io = { version = "0.0.1-alpha.9", path = "../epoint-io" }
+epoint-core = { version = "0.0.1-alpha.10", path = "../epoint-core" }
+epoint-transform = { version = "0.0.1-alpha.10", path = "../epoint-transform" }
+epoint-io = { version = "0.0.1-alpha.10", path = "../epoint-io" }

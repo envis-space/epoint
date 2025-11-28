@@ -5,7 +5,7 @@ use crate::Error::{
 };
 use chrono::{DateTime, TimeZone, Utc};
 use ecoord::octree::OctantIndex;
-use ecoord::{AxisAlignedBoundingBox, FrameId, ReferenceFrames, SphericalPoint3, TransformId};
+use ecoord::{AxisAlignedBoundingBox, FrameId, SphericalPoint3, TransformId, TransformTree};
 use nalgebra::{Isometry3, Point3, Quaternion, UnitQuaternion};
 use palette::Srgb;
 use parry3d_f64::shape::ConvexPolyhedron;
@@ -701,10 +701,10 @@ impl PointData {
             .into_par_iter()
             .map(|i: usize| {
                 UnitQuaternion::new_unchecked(Quaternion::new(
+                    w_values.get(i).unwrap(),
                     i_values.get(i).unwrap(),
                     j_values.get(i).unwrap(),
                     k_values.get(i).unwrap(),
-                    w_values.get(i).unwrap(),
                 ))
             })
             .collect();
@@ -801,12 +801,20 @@ impl PointData {
     }
 
     pub fn get_timestamp_min(&self) -> Result<Option<DateTime<Utc>>, Error> {
+        if !self.contains_timestamps() {
+            return Ok(None);
+        }
+
         let all_timestamps = self.get_all_timestamps()?;
         let value = all_timestamps.iter().min();
         Ok(value.copied())
     }
 
     pub fn get_timestamp_max(&self) -> Result<Option<DateTime<Utc>>, Error> {
+        if !self.contains_timestamps() {
+            return Ok(None);
+        }
+
         let all_timestamps = self.get_all_timestamps()?;
         let value = all_timestamps.iter().max();
         Ok(value.copied())
@@ -1715,15 +1723,19 @@ impl PointData {
     /// Expects a data frame with only one
     pub fn resolve_data_frame(
         &mut self,
-        reference_frame: &ReferenceFrames,
+        transform_tree: &TransformTree,
         timestamp: &Option<DateTime<Utc>>,
         frame_id: &FrameId,
         target_frame_id: &FrameId,
     ) -> Result<(), Error> {
         let transform_id = TransformId::new(target_frame_id.clone(), frame_id.clone());
 
-        let graph = reference_frame.derive_transform_graph(&None, timestamp)?;
-        let isometry = graph.get_isometry(&transform_id)?;
+        let isometry = if let Some(timestamp) = timestamp {
+            transform_tree.get_transform_at_time(&transform_id, *timestamp)
+        } else {
+            transform_tree.get_static_transform(&transform_id)
+        }?
+        .isometry();
 
         let transformed_points: Vec<Point3<f64>> = self
             .get_all_points()

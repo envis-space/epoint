@@ -98,7 +98,7 @@ impl PointCloudOctree {
         PointCloud::from_data_frame(
             filtered_data_frame,
             self.point_cloud.info.clone(),
-            self.point_cloud.reference_frames.clone(),
+            self.point_cloud.transform_tree.clone(),
         )
     }
 }

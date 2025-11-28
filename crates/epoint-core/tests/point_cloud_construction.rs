@@ -2,7 +2,7 @@
 mod point_cloud_construction_test {
 
     use chrono::{DateTime, TimeZone, Utc};
-    use ecoord::ReferenceFrames;
+    use ecoord::TransformTree;
     use epoint_core::{PointCloud, PointCloudInfo, PointDataColumns};
     use nalgebra::Point3;
 
@@ -28,7 +28,7 @@ mod point_cloud_construction_test {
         let _point_cloud = PointCloud::new(
             point_data,
             PointCloudInfo::default(),
-            ReferenceFrames::default(),
+            TransformTree::default(),
         )
         .unwrap();
     }
@@ -53,7 +53,7 @@ mod point_cloud_construction_test {
         )
         .unwrap();
         let point_info = PointCloudInfo::new(Some("another_frame_id".into()));
-        let point_cloud = PointCloud::new(point_data, point_info, ReferenceFrames::default());
+        let point_cloud = PointCloud::new(point_data, point_info, TransformTree::default());
 
         assert!(point_cloud.is_err())
     }

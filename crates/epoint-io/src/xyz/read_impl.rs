@@ -1,6 +1,6 @@
 use crate::Error::InvalidFileExtension;
 use crate::{Error, FILE_EXTENSION_XYZ_FORMAT};
-use ecoord::ReferenceFrames;
+use ecoord::TransformTree;
 use epoint_core::{PointCloud, PointCloudInfo, PointDataColumnType};
 use polars::prelude::*;
 use std::path::Path;
@@ -14,7 +14,7 @@ pub fn read_point_cloud_from_xyz_file(
     let point_cloud = PointCloud::from_data_frame(
         data_frame,
         PointCloudInfo::default(),
-        ReferenceFrames::default(),
+        TransformTree::default(),
     )?;
     Ok(point_cloud)
 }

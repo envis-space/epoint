@@ -28,7 +28,7 @@ pub fn translate(point_cloud: &PointCloud, translation: Vector3<f64>) -> Result<
     }
 
     let info = point_cloud.info().clone();
-    let frames = point_cloud.reference_frames().clone();
+    let frames = point_cloud.transform_tree().clone();
     let point_cloud = PointCloud::from_data_frame(translated_data, info, frames)?;
     Ok(point_cloud)
 }

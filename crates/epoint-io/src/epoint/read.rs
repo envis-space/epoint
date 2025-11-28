@@ -8,7 +8,7 @@ use crate::epoint::{
     FILE_NAME_POINT_DATA_UNCOMPRESSED,
 };
 use crate::error::Error;
-use ecoord::ReferenceFrames;
+use ecoord::TransformTree;
 use epoint_core::PointCloud;
 use epoint_core::PointCloudInfo;
 use polars::prelude::*;
@@ -34,7 +34,7 @@ impl<R: Read> EpointReader<R> {
 
         let mut info_document: Option<EpointInfoDocument> = None;
         let mut point_data_frame: Option<DataFrame> = None;
-        let mut reference_frames: Option<ReferenceFrames> = None;
+        let mut transform_tree: Option<TransformTree> = None;
 
         for file in archive.entries()? {
             let mut f = file?;
@@ -74,13 +74,13 @@ impl<R: Read> EpointReader<R> {
                     point_data_frame = Some(casted_data_frame);
                 }
                 FILE_NAME_ECOORD_UNCOMPRESSED => {
-                    reference_frames = Some(ecoord::io::EcoordReader::new(f).finish()?);
+                    transform_tree = Some(ecoord::io::EcoordReader::new(f).finish()?);
                 }
                 FILE_NAME_ECOORD_COMPRESSED => {
-                    let mut decompressed_buffer: Vec<u8> = Vec::new();
-                    zstd::stream::copy_decode(f, &mut decompressed_buffer)?;
-                    reference_frames = Some(
-                        ecoord::io::EcoordReader::new(Cursor::new(decompressed_buffer)).finish()?,
+                    transform_tree = Some(
+                        ecoord::io::EcoordReader::new(f)
+                            .with_compression(ecoord::io::Compression::default_zstd())
+                            .finish()?,
                     );
                 }
                 _ => {}
@@ -91,9 +91,9 @@ impl<R: Read> EpointReader<R> {
             .ok_or(FileNotFound("info".to_string()))?
             .into();
         let point_data_frame = point_data_frame.ok_or(FileNotFound("point_data".to_string()))?;
-        let reference_frames = reference_frames.ok_or(FileNotFound("ecoord".to_string()))?;
+        let transform_tree = transform_tree.ok_or(FileNotFound("ecoord".to_string()))?;
 
-        let point_cloud = PointCloud::from_data_frame(point_data_frame, info, reference_frames)?;
+        let point_cloud = PointCloud::from_data_frame(point_data_frame, info, transform_tree)?;
         Ok(point_cloud)
     }
 }

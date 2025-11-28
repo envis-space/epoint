@@ -6,14 +6,14 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1-alpha.9"
+version = "0.0.1-alpha.10"
 authors = ["Benedikt Schwab <benedikt.schwab@gmail.com>"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/envis-space/epoint"
 
 [workspace.dependencies]
-ecoord = { version = "0.0.1-alpha.9" }
+ecoord = { version = "0.0.1-alpha.10" }
 
 clap = "4.5.51"
 indicatif = "0.18.2"
