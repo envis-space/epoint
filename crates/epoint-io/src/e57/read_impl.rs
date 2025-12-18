@@ -25,8 +25,7 @@ pub fn import_point_cloud_from_e57_file<R: Read + Seek>(
     }
 
     let mut point_clouds: Vec<PointCloud> = Vec::new();
-    for (current_index, current_e57_point_cloud) in e57_reader.pointclouds().into_iter().enumerate()
-    {
+    for current_e57_point_cloud in e57_reader.pointclouds().into_iter() {
         let mut e57_point_cloud_reader = e57_reader.pointcloud_simple(&current_e57_point_cloud)?;
         e57_point_cloud_reader.apply_pose(false);
 

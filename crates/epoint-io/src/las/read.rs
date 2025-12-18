@@ -15,7 +15,7 @@ use std::path::Path;
 /// `LasReader` imports a point cloud from a LAS or LAZ file.
 ///
 #[derive(Debug, Clone)]
-pub struct LasReader<R: Read + Seek + Send + Debug> {
+pub struct LasReader<R: Read + Seek + Send + Sync + Debug> {
     reader: R,
     sidecar_ecoord_reader: Option<EcoordReader<R>>,
     normalize_colors: bool,
@@ -23,7 +23,7 @@ pub struct LasReader<R: Read + Seek + Send + Debug> {
     points_per_chunk: Option<u64>,
 }
 
-impl<R: Read + Seek + Send + 'static + Debug> LasReader<R> {
+impl<R: Read + Seek + Send + Sync + 'static + Debug> LasReader<R> {
     /// Create a new [`LasReader`] from an existing `Reader`.
     pub fn new(reader: R) -> Self {
         Self {

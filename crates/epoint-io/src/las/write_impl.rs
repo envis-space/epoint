@@ -1,19 +1,21 @@
 use crate::Error;
-use chrono::{TimeZone, Timelike, Utc};
+use crate::las::ADJUSTED_GPS_TIME_OFFSET;
+use crate::las::GPS_EPOCH_REFERENCE_TIMESTAMP;
+use chrono::{TimeZone, Timelike};
 use epoint_core::PointCloud;
 use las::GpsTimeType;
 use rayon::prelude::*;
 use std::fmt::Debug;
 use std::io::Seek;
 
-pub fn write_las_format<W: 'static + std::io::Write + Seek + Debug + Send>(
+pub fn write_las_format<W: 'static + std::io::Write + Seek + Sync + Debug + Send>(
     writer: W,
-    point_cloud: &PointCloud,
+    point_cloud: PointCloud,
 ) -> Result<(), Error> {
     let center = point_cloud.point_data.get_local_center();
 
     let mut builder = las::Builder::from((1, 4));
-    builder.point_format = las::point::Format::new(0).unwrap();
+    builder.point_format = las::point::Format::new(0)?;
     builder.point_format.has_gps_time = point_cloud.contains_timestamps();
     builder.point_format.has_color = point_cloud.contains_colors();
     //builder.point_format.is_extended = false;
@@ -24,7 +26,7 @@ pub fn write_las_format<W: 'static + std::io::Write + Seek + Debug + Send>(
     builder.transforms.z.offset = center.z;
     builder.gps_time_type = GpsTimeType::Standard;
 
-    let header = builder.into_header().unwrap();
+    let header = builder.into_header()?;
 
     //header.transforms = las::Transform::default();
 
@@ -32,14 +34,15 @@ pub fn write_las_format<W: 'static + std::io::Write + Seek + Debug + Send>(
     let mut las_writer = las::Writer::new(writer, header)?;
 
     let converted_timestamps = if point_cloud.contains_timestamps() {
-        // this calculation should be the adjusted gps time (see: https://groups.google.com/g/lastools/c/_9TxnjoghGM)
         // GPS time: https://en.wikipedia.org/wiki/Global_Positioning_System#Timekeeping
-        let base_time = Utc.with_ymd_and_hms(1980, 1, 6, 0, 0, 0).unwrap();
         let values: Vec<f64> = point_cloud
             .point_data
             .get_all_timestamps()?
             .par_iter()
-            .map(|t| ((*t - base_time).num_seconds()) as f64 + (t.nanosecond() as f64 * 1.0e-9))
+            .map(|t| {
+                (t.timestamp() - ADJUSTED_GPS_TIME_OFFSET - GPS_EPOCH_REFERENCE_TIMESTAMP) as f64
+                    + (t.nanosecond() as f64 * 1.0e-9)
+            })
             .collect();
         Some(values)
     } else {

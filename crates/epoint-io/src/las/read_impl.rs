@@ -1,9 +1,10 @@
 use crate::Error;
 use crate::Error::InvalidVersion;
-use crate::las::LasVersion;
+use crate::las::GPS_EPOCH_REFERENCE_TIMESTAMP;
 use crate::las::read::LasReadInfo;
+use crate::las::{ADJUSTED_GPS_TIME_OFFSET, LasVersion};
 use epoint_core::{PointCloud, PointCloudInfo, PointDataColumnType};
-use las::{Read, Version};
+use las::{GpsTimeType, Version};
 
 use ecoord::FrameId;
 use epoint_core::Error::NoRemainingPoints;
@@ -13,13 +14,16 @@ use rayon::prelude::*;
 use std::fmt::Debug;
 use std::io::{BufReader, Seek};
 
-pub fn import_point_cloud_from_las_reader<R: std::io::Read + Seek + Send + 'static + Debug>(
+pub fn import_point_cloud_from_las_reader<
+    R: std::io::Read + Seek + Send + Sync + 'static + Debug,
+>(
     reader: R,
     normalize_colors: bool,
     reference_frame_id: FrameId,
     points_per_chunk: Option<u64>,
 ) -> Result<(PointCloud, LasReadInfo), Error> {
     let mut las_reader = las::Reader::new(BufReader::new(reader))?;
+    let gps_time_type = las_reader.header().gps_time_type();
 
     let mut point_data_data_frames: Vec<LazyFrame> = Vec::new();
 
@@ -30,7 +34,8 @@ pub fn import_point_cloud_from_las_reader<R: std::io::Read + Seek + Send + 'stat
                 break;
             }
 
-            let current_data_frame = convert_to_data_frame(las_points, normalize_colors)?.lazy();
+            let current_data_frame =
+                convert_to_data_frame(las_points, normalize_colors, gps_time_type)?.lazy();
             point_data_data_frames.push(current_data_frame);
         }
         concat(point_data_data_frames, Default::default())?.collect()?
@@ -38,7 +43,7 @@ pub fn import_point_cloud_from_las_reader<R: std::io::Read + Seek + Send + 'stat
         let mut las_points: Vec<las::Point> = Vec::new();
         las_reader.read_all_points_into(&mut las_points)?;
 
-        convert_to_data_frame(las_points, normalize_colors)?
+        convert_to_data_frame(las_points, normalize_colors, gps_time_type)?
     };
 
     let info = PointCloudInfo::new(Some(reference_frame_id));
@@ -70,6 +75,7 @@ fn get_version(las_reader: &las::Reader) -> Result<LasVersion, Error> {
 fn convert_to_data_frame(
     las_points: Vec<las::Point>,
     normalize_colors: bool,
+    gps_time_type: GpsTimeType,
 ) -> Result<DataFrame, Error> {
     if las_points.is_empty() {
         return Err(NoRemainingPoints.into());
@@ -100,12 +106,7 @@ fn convert_to_data_frame(
     if las_points.iter().all(|p| p.gps_time.is_some()) {
         let (seconds, nanos): (Vec<i64>, Vec<u32>) = las_points
             .par_iter()
-            .map(|p| {
-                let time = p.gps_time.unwrap(); // Safe: checked above
-                let seconds = time.floor() as i64;
-                let nanos = ((time - time.floor()) * 1_000_000_000.0) as u32;
-                (seconds, nanos)
-            })
+            .map(|p| normalize_timestamp(p.gps_time.unwrap(), gps_time_type))
             .unzip();
 
         point_data_columns.push(Column::new(
@@ -171,4 +172,21 @@ fn convert_to_data_frame(
     // println!("Created data frame with {} rows", data_frame.height());
     // println!("Data frame schema: {:?}", data_frame.schema());
     Ok(data_frame)
+}
+
+const NANOS_PER_SECOND: f64 = 1_000_000_000.0;
+const MAX_NANOS: u32 = 999_999_999;
+
+fn normalize_timestamp(timestamp: f64, gps_time_type: GpsTimeType) -> (i64, u32) {
+    let seconds_floor = timestamp.floor() as i64;
+    let nanos = (timestamp.fract() * NANOS_PER_SECOND).clamp(0.0, MAX_NANOS as f64) as u32;
+
+    let seconds = match gps_time_type {
+        GpsTimeType::Week => seconds_floor,
+        GpsTimeType::Standard => {
+            seconds_floor + ADJUSTED_GPS_TIME_OFFSET + GPS_EPOCH_REFERENCE_TIMESTAMP
+        }
+    };
+
+    (seconds, nanos)
 }

@@ -3,7 +3,7 @@ mod e57;
 mod epoint;
 mod error;
 mod format;
-mod las;
+pub(crate) mod las;
 mod xyz;
 
 #[doc(inline)]

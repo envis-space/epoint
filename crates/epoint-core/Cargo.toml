@@ -12,7 +12,7 @@ description = "Core primitives and operations for processing 3D point clouds."
 ecoord = { workspace = true }
 
 thiserror = { workspace = true }
-polars = { workspace = true, features = ["lazy", "parquet", "ndarray", "dtype-categorical", "dtype-u16", "strings", "partition_by", "is_between"] }
+polars = { workspace = true, features = ["lazy", "parquet", "ndarray", "dtype-categorical", "dtype-u16", "strings", "partition_by", "is_between", "regex", "timezones"] }
 parry3d-f64 = { workspace = true }
 ndarray = { workspace = true }
 palette = { workspace = true }

@@ -58,12 +58,12 @@ impl AutoWriter {
             PointCloudFormat::E57 => Err(FormatNotSupported(
                 "E57 not supported for reading".to_string(),
             )),
-            PointCloudFormat::Las => LasWriter::from_path(self.path)?.finish(&point_cloud),
-            PointCloudFormat::Laz => LasWriter::from_path(self.path)?.finish(&point_cloud),
+            PointCloudFormat::Las => LasWriter::from_path(self.path)?.finish(point_cloud),
+            PointCloudFormat::Laz => LasWriter::from_path(self.path)?.finish(point_cloud),
             PointCloudFormat::Xyz => XyzWriter::from_path(self.path)?
                 .with_compressed(false)
-                .finish(&point_cloud),
-            PointCloudFormat::XyzZst => XyzWriter::from_path(self.path)?.finish(&point_cloud),
+                .finish(point_cloud),
+            PointCloudFormat::XyzZst => XyzWriter::from_path(self.path)?.finish(point_cloud),
         }
     }
 }

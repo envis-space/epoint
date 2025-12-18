@@ -12,12 +12,12 @@ use std::path::Path;
 /// `EpointWriter` sets up a writer for the custom reader data structure.
 ///
 #[derive(Debug, Clone)]
-pub struct LasWriter<W: 'static + std::io::Write + Seek + Debug + Send> {
+pub struct LasWriter<W: 'static + Write + Seek + Sync + Debug + Send> {
     writer: W,
     frame_id: Option<FrameId>,
 }
 
-impl<W: Write + Seek + Debug + Send> LasWriter<W> {
+impl<W: Write + Seek + Sync + Debug + Send> LasWriter<W> {
     pub fn new(writer: W) -> Self {
         Self {
             writer,
@@ -30,17 +30,12 @@ impl<W: Write + Seek + Debug + Send> LasWriter<W> {
         self
     }
 
-    pub fn finish(self, point_cloud: &PointCloud) -> Result<(), Error> {
-        let mut exported_point_cloud = point_cloud.clone();
-        let resulting_point_cloud: PointCloud =
-            self.frame_id.map_or(point_cloud.to_owned(), |f: FrameId| {
-                exported_point_cloud
-                    .resolve_to_frame(f)
-                    .expect("Resolving should work");
-                exported_point_cloud
-            });
+    pub fn finish(self, mut point_cloud: PointCloud) -> Result<(), Error> {
+        if let Some(frame_id) = self.frame_id {
+            point_cloud.resolve_to_frame(frame_id)?;
+        };
 
-        write_las_format(BufWriter::new(self.writer), &resulting_point_cloud)?;
+        write_las_format(BufWriter::new(self.writer), point_cloud)?;
 
         Ok(())
     }

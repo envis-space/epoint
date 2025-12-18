@@ -46,7 +46,7 @@ pub fn run(input_directory: impl AsRef<Path>, output_file: impl AsRef<Path>) -> 
     info!("Start writing");
     XyzWriter::from_path(output_file.as_ref())?
         .with_color_depth(ColorDepth::EightBit)
-        .finish(&merged_point_cloud)?;
+        .finish(merged_point_cloud)?;
 
     Ok(())
 }

@@ -35,3 +35,31 @@ impl LasVersion {
         }
     }
 }
+
+/// GPS epoch reference timestamp (Unix time).
+///
+/// GPS time is defined as seconds elapsed since January 6, 1980, 00:00:00 UTC.
+/// This constant represents the Unix timestamp (seconds since January 1, 1970, 00:00:00 UTC)
+/// corresponding to the GPS epoch start date.
+///
+/// # Value
+/// `315964800` seconds = 10 years, 6 days from Unix epoch to GPS epoch
+///
+/// ```
+/// use chrono::Utc;
+/// use chrono::TimeZone;
+/// let base_time = Utc.with_ymd_and_hms(1980, 1, 6, 0, 0, 0).unwrap();
+///
+/// assert_eq!(base_time.timestamp(), 315964800);
+/// ```
+///
+/// # Examples
+/// - GPS epoch (0 GPS seconds) = Unix timestamp 315964800
+/// - Current time in GPS seconds can be obtained by subtracting this constant from the Unix timestamp
+///
+/// # Reference
+/// [GPS Time System](https://en.wikipedia.org/wiki/Global_Positioning_System#Timekeeping)
+const GPS_EPOCH_REFERENCE_TIMESTAMP: i64 = 315964800;
+
+// Adjusted GPS time offset in seconds (see: https://groups.google.com/g/lastools/c/_9TxnjoghGM)
+const ADJUSTED_GPS_TIME_OFFSET: i64 = 1_000_000_000;

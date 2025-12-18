@@ -34,7 +34,7 @@ pub fn run(
             epoint::transform::translate(&point_cloud, translation_offset)?;
 
         let file_name = current_path.file_name().unwrap();
-        LasWriter::from_path(output_directory.join(file_name))?.finish(&translated_point_cloud)?;
+        LasWriter::from_path(output_directory.join(file_name))?.finish(translated_point_cloud)?;
     }
 
     Ok(())

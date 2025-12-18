@@ -1,6 +1,6 @@
 use crate::{Error, PointCloud, PointData};
 use ecoord::HasAabb;
-use ecoord::octree::{OctantIndex, Octree};
+use ecoord::octree::{OctantIndex, Octree, StorageMode};
 use itertools::Itertools;
 use nalgebra::Point3;
 use polars::prelude::NewChunkedArray;
@@ -30,6 +30,7 @@ impl PointData {
     pub fn compute_octree(
         &mut self,
         max_items_per_octant: usize,
+        storage_mode: StorageMode,
         shuffle_seed_number: Option<u64>,
     ) -> Result<(), Error> {
         let all_points: Vec<PointWithIndex> = self
@@ -39,7 +40,12 @@ impl PointData {
             .map(|(index, point)| PointWithIndex { index, point })
             .collect();
 
-        let octree = Octree::new(all_points, max_items_per_octant, shuffle_seed_number)?;
+        let octree = Octree::new(
+            all_points,
+            max_items_per_octant,
+            storage_mode,
+            shuffle_seed_number,
+        )?;
 
         let octant_indices: Vec<(usize, OctantIndex)> = octree
             .cells()
@@ -63,6 +69,7 @@ impl PointCloudOctree {
     pub fn new(
         point_cloud: PointCloud,
         max_points_per_octant: usize,
+        storage_mode: StorageMode,
         shuffle_seed_number: Option<u64>,
     ) -> Result<Self, Error> {
         let all_points: Vec<PointWithIndex> = point_cloud
@@ -72,7 +79,12 @@ impl PointCloudOctree {
             .enumerate()
             .map(|(index, point)| PointWithIndex { index, point })
             .collect();
-        let octree = Octree::new(all_points, max_points_per_octant, shuffle_seed_number)?;
+        let octree = Octree::new(
+            all_points,
+            max_points_per_octant,
+            storage_mode,
+            shuffle_seed_number,
+        )?;
 
         let point_cloud_octree = PointCloudOctree {
             point_cloud,

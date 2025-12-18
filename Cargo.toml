@@ -6,25 +6,25 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.0.1-alpha.10"
+version = "0.0.1-alpha.12"
 authors = ["Benedikt Schwab <benedikt.schwab@gmail.com>"]
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/envis-space/epoint"
 
 [workspace.dependencies]
-ecoord = { version = "0.0.1-alpha.10" }
+ecoord = { version = "0.0.1-alpha.12" }
 
-clap = "4.5.51"
-indicatif = "0.18.2"
+clap = "4.5.53"
+indicatif = "0.18.3"
 humantime = "2.3.0"
-tracing = "0.1.41"
-tracing-subscriber = "0.3.20"
+tracing = "0.1.43"
+tracing-subscriber = "0.3.22"
 itertools = "0.14.0"
-polars = "0.51.0"
-parry3d-f64 = "0.25.1"
+polars = "0.52.0"
+parry3d-f64 = "0.25.3"
 tokio = "1.48.0"
-ndarray = "0.16.1"
+ndarray = "0.17.1"
 nalgebra = "0.34.1"
 palette = "0.7.6"
 chrono = "0.4.42"
@@ -35,8 +35,8 @@ anyhow = "1.0.100"
 thiserror = "2.0.17"
 serde = "1.0.228"
 serde_json = "1.0.145"
-las = "0.9.6"
-e57 = "0.11.11"
+las = "0.9.8"
+e57 = "0.11.12"
 tar = "0.4.44"
 zstd = "0.13.3"
 approx = "0.5.1"

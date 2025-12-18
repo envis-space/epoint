@@ -76,24 +76,22 @@ impl<W: Write> XyzWriter<W> {
         self
     }
 
-    pub fn finish(self, point_cloud: &PointCloud) -> Result<(), Error> {
-        let mut exported_point_cloud = point_cloud.clone();
+    pub fn finish(self, mut point_cloud: PointCloud) -> Result<(), Error> {
         if let Some(frame_id) = &self.frame_id {
-            exported_point_cloud.resolve_to_frame(frame_id.clone())?;
+            point_cloud.resolve_to_frame(frame_id.clone())?;
         }
         /*let mut resulting_point_cloud: PointCloud =
         self.frame_id
             .clone()
             .map_or(point_cloud.to_owned(), |f: FrameId| {
-                exported_point_cloud
-                    .resolve_to_frame(f)?;
-                exported_point_cloud
+                point_cloud.resolve_to_frame(f)?;
+                point_cloud
             });*/
 
-        if exported_point_cloud.contains_colors() {
+        if point_cloud.contains_colors() {
             match self.color_depth {
                 ColorDepth::EightBit => {
-                    let converted_colors: Vec<Srgb<u8>> = exported_point_cloud
+                    let converted_colors: Vec<Srgb<u8>> = point_cloud
                         .point_data
                         .get_all_colors()?
                         .into_par_iter()
@@ -104,7 +102,7 @@ impl<W: Write> XyzWriter<W> {
                         PointDataColumnType::X.into(),
                         converted_colors.iter().map(|c| c.red).collect::<Vec<u8>>(),
                     );
-                    exported_point_cloud
+                    point_cloud
                         .point_data
                         .data_frame
                         .replace(PointDataColumnType::ColorRed.as_str(), color_red_series)?;
@@ -116,7 +114,7 @@ impl<W: Write> XyzWriter<W> {
                             .map(|c| c.green)
                             .collect::<Vec<u8>>(),
                     );
-                    exported_point_cloud
+                    point_cloud
                         .point_data
                         .data_frame
                         .replace(PointDataColumnType::ColorGreen.as_str(), color_green_series)?;
@@ -125,7 +123,7 @@ impl<W: Write> XyzWriter<W> {
                         PointDataColumnType::Z.into(),
                         converted_colors.iter().map(|c| c.blue).collect::<Vec<u8>>(),
                     );
-                    exported_point_cloud
+                    point_cloud
                         .point_data
                         .data_frame
                         .replace(PointDataColumnType::ColorBlue.as_str(), color_blue_series)?;
@@ -147,7 +145,7 @@ impl<W: Write> XyzWriter<W> {
         CsvWriter::new(writer)
             .with_separator(self.separator)
             .with_null_value(self.null_value)
-            .finish(&mut exported_point_cloud.point_data.data_frame)?;
+            .finish(&mut point_cloud.point_data.data_frame)?;
 
         Ok(())
     }
