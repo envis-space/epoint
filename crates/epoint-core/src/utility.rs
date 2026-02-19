@@ -2,7 +2,7 @@ use crate::Error;
 use crate::Error::InvalidNumber;
 use crate::point_data::PointData;
 use polars::datatypes::BooleanChunked;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use std::collections::HashSet;

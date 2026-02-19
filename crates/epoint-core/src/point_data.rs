@@ -912,10 +912,10 @@ impl PointData {
     }
 
     pub fn derive_convex_hull(&self) -> Option<ConvexPolyhedron> {
-        let points: Vec<parry3d_f64::math::Point<f64>> = self
+        let points: Vec<parry3d_f64::math::Vec3> = self
             .get_all_points()
             .iter()
-            .map(|p| parry3d_f64::math::Point::new(p.x, p.y, p.z))
+            .map(|p| parry3d_f64::math::Vec3::new(p.x, p.y, p.z))
             .collect();
         ConvexPolyhedron::from_convex_hull(&points)
     }

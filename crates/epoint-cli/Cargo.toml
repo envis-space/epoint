@@ -9,7 +9,9 @@ description = "CLI tool for processing 3D point clouds."
 
 
 [dependencies]
-epoint = { version = "0.0.1-alpha.12", path = "../epoint" }
+epoint = { version = "0.0.1-alpha.13", path = "../epoint" }
+
+ecoord = { workspace = true }
 
 thiserror = { workspace = true }
 anyhow = { workspace = true }
@@ -24,8 +26,3 @@ walkdir = { workspace = true }
 rayon = { workspace = true }
 chrono = { workspace = true }
 polars = { workspace = true }
-
-
-[[bin]]
-name = "epoint"
-path = "src/main.rs"

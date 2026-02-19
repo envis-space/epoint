@@ -17,14 +17,23 @@ fn main() -> Result<()> {
         Commands::Statistics { file_path } => {
             commands::statistics::run(file_path.canonicalize()?)?;
         }
-        Commands::Offset {
+        Commands::Transform {
             input_directory,
             output_directory,
-            offset,
+            translation,
+            frame_id,
+            format,
         } => {
-            let translation_offset: Vector3<f64> = Vector3::new(offset[0], offset[1], offset[2]);
+            let translation_vector: Vector3<f64> =
+                Vector3::new(translation[0], translation[1], translation[2]);
 
-            commands::offset::run(input_directory, output_directory, translation_offset)?;
+            commands::transform::run(
+                input_directory,
+                output_directory,
+                translation_vector,
+                frame_id,
+                format.to_epoint_format(),
+            )?;
         }
         Commands::Merge {
             input_directory,

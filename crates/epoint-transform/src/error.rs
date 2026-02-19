@@ -17,4 +17,6 @@ pub enum Error {
     InvalidNumber,
     #[error("path is not a directory")]
     DifferentPointCloudInfos,
+    #[error("transform id {0} not found in transform tree")]
+    TransformIdNotFound(String),
 }

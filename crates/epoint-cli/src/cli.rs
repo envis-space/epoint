@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum, ValueHint};
+use ecoord::FrameId;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -17,24 +18,32 @@ pub enum Commands {
         file_path: PathBuf,
     },
 
-    /// Compute some statistics about the dataset
-    Offset {
-        /// Input directory
+    /// Translate all point clouds in `--input-directory` by an XYZ vector and write them to `--output-directory`.
+    Transform {
+        /// Directory containing point cloud files to process.
         #[clap(short, long, value_hint = ValueHint::DirPath)]
         input_directory: PathBuf,
 
-        /// Path to the output directory
+        /// Output directory to write translated point clouds to (created if it doesn't exist).
         #[clap(short, long, value_hint = ValueHint::DirPath)]
         output_directory: PathBuf,
 
-        /// Offset point cloud
+        /// Translation vector (X Y Z) to add to every point (in the dataset's coordinate units).
         #[clap(
             long,
             required = true,
             number_of_values = 3,
             allow_hyphen_values = true
         )]
-        offset: Vec<f64>,
+        translation: Vec<f64>,
+
+        /// Frame ID onto which to apply the transform
+        #[clap(long, default_value_t = FrameId::global())]
+        frame_id: FrameId,
+
+        /// Output point cloud format.
+        #[clap(long, default_value_t = PointCloudFormat::Epoint, value_enum)]
+        format: PointCloudFormat,
     },
 
     /// Merge point clouds
@@ -98,13 +107,13 @@ pub enum PointCloudFormat {
 impl PointCloudFormat {
     pub fn to_epoint_format(&self) -> epoint::io::PointCloudFormat {
         match self {
-            PointCloudFormat::Epoint => epoint::io::PointCloudFormat::Epoint,
-            PointCloudFormat::EpointTar => epoint::io::PointCloudFormat::EpointTar,
-            PointCloudFormat::E57 => epoint::io::PointCloudFormat::E57,
-            PointCloudFormat::Las => epoint::io::PointCloudFormat::Las,
-            PointCloudFormat::Laz => epoint::io::PointCloudFormat::Laz,
-            PointCloudFormat::Xyz => epoint::io::PointCloudFormat::Xyz,
-            PointCloudFormat::XyzZst => epoint::io::PointCloudFormat::XyzZst,
+            Self::Epoint => epoint::io::PointCloudFormat::Epoint,
+            Self::EpointTar => epoint::io::PointCloudFormat::EpointTar,
+            Self::E57 => epoint::io::PointCloudFormat::E57,
+            Self::Las => epoint::io::PointCloudFormat::Las,
+            Self::Laz => epoint::io::PointCloudFormat::Laz,
+            Self::Xyz => epoint::io::PointCloudFormat::Xyz,
+            Self::XyzZst => epoint::io::PointCloudFormat::XyzZst,
         }
     }
 }

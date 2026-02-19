@@ -15,4 +15,6 @@ pub enum Error {
     PolarsResult(#[from] polars::error::PolarsError),
     #[error(transparent)]
     AnyhowResult(#[from] anyhow::Error),
+    #[error(transparent)]
+    StdStripPrefixError(#[from] std::path::StripPrefixError),
 }

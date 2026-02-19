@@ -17,30 +17,30 @@ pub enum PointCloudFormat {
 }
 
 impl PointCloudFormat {
-    pub fn from_path(path: impl AsRef<Path>) -> Option<PointCloudFormat> {
+    pub fn from_path(path: impl AsRef<Path>) -> Option<Self> {
         let path_str = path.as_ref().file_name()?.to_string_lossy().to_lowercase();
 
         match path_str {
-            s if s.ends_with(FILE_EXTENSION_EPOINT_FORMAT) => Some(PointCloudFormat::Epoint),
-            s if s.ends_with(FILE_EXTENSION_EPOINT_TAR_FORMAT) => Some(PointCloudFormat::EpointTar),
-            s if s.ends_with(FILE_EXTENSION_E57_FORMAT) => Some(PointCloudFormat::E57),
-            s if s.ends_with(FILE_EXTENSION_LAS_FORMAT) => Some(PointCloudFormat::Las),
-            s if s.ends_with(FILE_EXTENSION_LAZ_FORMAT) => Some(PointCloudFormat::Laz),
-            s if s.ends_with(FILE_EXTENSION_XYZ_FORMAT) => Some(PointCloudFormat::Xyz),
-            s if s.ends_with(FILE_EXTENSION_XYZ_ZST_FORMAT) => Some(PointCloudFormat::XyzZst),
+            s if s.ends_with(FILE_EXTENSION_EPOINT_FORMAT) => Some(Self::Epoint),
+            s if s.ends_with(FILE_EXTENSION_EPOINT_TAR_FORMAT) => Some(Self::EpointTar),
+            s if s.ends_with(FILE_EXTENSION_E57_FORMAT) => Some(Self::E57),
+            s if s.ends_with(FILE_EXTENSION_LAS_FORMAT) => Some(Self::Las),
+            s if s.ends_with(FILE_EXTENSION_LAZ_FORMAT) => Some(Self::Laz),
+            s if s.ends_with(FILE_EXTENSION_XYZ_FORMAT) => Some(Self::Xyz),
+            s if s.ends_with(FILE_EXTENSION_XYZ_ZST_FORMAT) => Some(Self::XyzZst),
             _ => None,
         }
     }
 
     pub fn extension(&self) -> &'static str {
         match self {
-            PointCloudFormat::Epoint => FILE_EXTENSION_EPOINT_FORMAT,
-            PointCloudFormat::EpointTar => FILE_EXTENSION_EPOINT_TAR_FORMAT,
-            PointCloudFormat::E57 => FILE_EXTENSION_E57_FORMAT,
-            PointCloudFormat::Las => FILE_EXTENSION_LAS_FORMAT,
-            PointCloudFormat::Laz => FILE_EXTENSION_LAZ_FORMAT,
-            PointCloudFormat::Xyz => FILE_EXTENSION_XYZ_FORMAT,
-            PointCloudFormat::XyzZst => FILE_EXTENSION_XYZ_ZST_FORMAT,
+            Self::Epoint => FILE_EXTENSION_EPOINT_FORMAT,
+            Self::EpointTar => FILE_EXTENSION_EPOINT_TAR_FORMAT,
+            Self::E57 => FILE_EXTENSION_E57_FORMAT,
+            Self::Las => FILE_EXTENSION_LAS_FORMAT,
+            Self::Laz => FILE_EXTENSION_LAZ_FORMAT,
+            Self::Xyz => FILE_EXTENSION_XYZ_FORMAT,
+            Self::XyzZst => FILE_EXTENSION_XYZ_ZST_FORMAT,
         }
     }
 
@@ -49,6 +49,6 @@ impl PointCloudFormat {
             return false;
         }
 
-        PointCloudFormat::from_path(&path).is_some()
+        Self::from_path(&path).is_some()
     }
 }

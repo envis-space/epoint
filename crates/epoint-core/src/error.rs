@@ -38,25 +38,25 @@ pub enum Error {
 
     #[error("Point cloud contains no id column")]
     NoIdColumn,
-    #[error("Point cloud contains no id column")]
+    #[error("Point cloud contains no sensor translation columns")]
     NoSensorTranslationColumn,
-    #[error("Point cloud contains no id column")]
+    #[error("Point cloud contains no spherical range column")]
     NoSphericalRangeColumn,
-    #[error("Point cloud contains no id column")]
+    #[error("Point cloud contains no octant indices columns")]
     NoOctantIndicesColumns,
 
-    #[error("Point cloud contains no id column")]
+    #[error("Point cloud has no remaining points")]
     NoRemainingPoints,
 
     #[error("No row indices specified")]
     NoRowIndices,
-    #[error("No row indices specified")]
+    #[error("Row index is outside the valid range")]
     RowIndexOutsideRange,
 
-    #[error("No row indices specified")]
+    #[error("Lower bound exceeds upper bound")]
     LowerBoundExceedsUpperBound,
-    #[error("No row indices specified")]
+    #[error("Lower bound equals upper bound")]
     LowerBoundEqualsUpperBound,
-    #[error("path is not a directory")]
+    #[error("Invalid number")]
     InvalidNumber,
 }
